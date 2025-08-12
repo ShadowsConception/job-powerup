@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import BuildStamp from "../../components/BuildStamp";
 
-export const dynamic = "force-dynamic"; // avoid any accidental static caching
+export const dynamic = "force-dynamic"; // avoid stale caching
 
 type QuizItem = { question: string; idealAnswer: string };
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -25,6 +26,31 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
     <div className="fixed bottom-6 right-6 z-50">
       <div className="rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">{message}</div>
     </div>
+  );
+}
+
+function ThemePebble() {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  useEffect(() => {
+    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
+    setTheme(saved);
+    document.documentElement.classList.toggle("dark", saved === "dark");
+  }, []);
+  function toggle() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("jp_theme", next);
+    document.documentElement.classList.toggle("dark", next === "dark");
+  }
+  return (
+    <button
+      onClick={toggle}
+      className="fixed bottom-6 left-6 z-40 rounded-full px-3 py-2 bg-gray-900 text-white hover:bg-black"
+      aria-label="Toggle theme"
+      title="Toggle theme"
+    >
+      {theme === "dark" ? "🌙" : "☀️"}
+    </button>
   );
 }
 
@@ -95,9 +121,7 @@ export default function ResultsPage() {
       }
     } catch {}
     const tipSeen = localStorage.getItem("jp_chat_tip_seen");
-    if (!tipSeen) {
-      setShowTip(true);
-    }
+    if (!tipSeen) setShowTip(true);
   }, []);
 
   useEffect(() => {
@@ -221,15 +245,14 @@ export default function ResultsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // keep roles literal to prevent TS widening
-          messages: nextMsgs,
+          messages: nextMsgs, // [{role:'user'|'assistant', content}]
           jobDescription,
           resumeText,
         }),
       });
 
       const data = await res.json();
-      const ai = String(data?.reply || "");
+      const ai = String(data?.reply || "Sorry—no reply received.");
       const finalMsgs: ChatMessage[] = [...nextMsgs, { role: "assistant" as const, content: ai }];
       setMessages(finalMsgs);
       sessionStorage.setItem("jp_chat_msgs", JSON.stringify(finalMsgs));
@@ -239,7 +262,7 @@ export default function ResultsPage() {
         {
           role: "assistant",
           content:
-            "Sorry—something went wrong. Feel free to try again. I’ll be honest but kind, and stick to properly formatted resume guidance.",
+            "Sorry—something went wrong. Try again. I’ll be honest but kind, and keep resume formatting clean.",
         },
       ]);
     } finally {
@@ -257,7 +280,7 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      {/* Transparent header reused styling */}
+      {/* Transparent header */}
       <header className="sticky top-0 z-40 border-b border-transparent bg-transparent/50 backdrop-blur supports-[backdrop-filter]:bg-transparent/45">
         <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between gap-4">
           <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
@@ -589,14 +612,12 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Footer with build badge (optional) */}
+      {/* Footer with build badge */}
       <footer className="bg-gray-100/60 dark:bg-gray-950/60 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
           <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
-            © {new Date().getFullYear()} Job PowerUp. All rights reserved.
-            <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
-              Build: {process.env.NEXT_PUBLIC_COMMIT_SHA?.slice(0, 7) || "dev"}
-            </span>
+            © {new Date().getFullYear()} Job PowerUp. All rights reserved.{" "}
+            <BuildStamp className="ml-2" />
           </div>
           <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
             <a href="/privacy" className="hover:underline">
@@ -611,32 +632,8 @@ export default function ResultsPage() {
           </nav>
         </div>
       </footer>
-    </div>
-  );
-}
 
-/** Small floating theme toggle pebble (bottom-left) */
-function ThemePebble() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="fixed bottom-6 left-6 z-40 rounded-full px-3 py-2 bg-gray-900 text-white hover:bg-black"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙" : "☀️"}
-    </button>
+      {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
+    </div>
   );
 }
