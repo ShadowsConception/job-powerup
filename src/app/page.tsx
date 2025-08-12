@@ -86,6 +86,10 @@ export default function LandingPage() {
   const [status, setStatus] = useState<null | string>(null);
   const progressTimerRef = useRef<number | null>(null);
 
+  // Footer year + brand
+  const currentYear = new Date().getFullYear();
+  const BRAND = "Job PowerUp"; // change if you want a company name here
+
   useEffect(() => {
     const jd = sessionStorage.getItem("jp_resume_jobDescription");
     if (jd) setJobDescription(jd);
@@ -257,108 +261,127 @@ export default function LandingPage() {
     }
   }
 
+  const isReadyToGenerate = !loading && !!file && !!jobDescription.trim();
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <div className="mx-auto max-w-4xl px-6 py-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="text-left">
-            <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Job PowerUp</h1>
-            <p className="mt-1 text-gray-600 dark:text-gray-400">
-              Upload your résumé, paste a job description, or import from a link — then generate tailored outputs.
-            </p>
-          </div>
-          <ThemeToggle />
-        </div>
-
-        {/* Centered card */}
-        <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
-          {/* Upload */}
-          <div>
-            <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Upload Your Résumé (PDF or DOCX)</h2>
-            <input
-              type="file"
-              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className={inputBase}
-            />
-            {file?.name && <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {file.name}</div>}
-          </div>
-
-          {/* Import from link */}
-          <div className="space-y-2">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <input
-                className={`${inputBase} flex-1`}
-                placeholder="https://careers.company.com/job/12345"
-                value={jobUrl}
-                onChange={(e) => setJobUrl(e.target.value)}
-                type="url"
-                inputMode="url"
-              />
-              <button
-                onClick={importFromLink}
-                disabled={importing || !jobUrl.trim()}
-                className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50"
-              >
-                {importing && <Spinner />}
-                {importing ? "Importing…" : "Import from link"}
-              </button>
-            </div>
-            {importTitle && (
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                <span className="font-semibold">Imported title:</span> {importTitle}
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
+      <main className="flex-1">
+        <div className="mx-auto max-w-4xl px-6 py-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="text-left">
+              <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Job PowerUp</h1>
+              <p className="mt-1 text-gray-600 dark:text-gray-400">
+                Upload your résumé, paste a job description, or import from a link — then generate tailored outputs.
               </p>
-            )}
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              If a site blocks import, use the <a href="/import-helper" className="underline">bookmarklet</a> and paste here.
-            </p>
+            </div>
+            <ThemeToggle />
           </div>
 
-          {/* JD textarea */}
-          <div>
-            <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
-            <textarea
-              className={`${taBase} h-72`}
-              value={jobDescription}
-              onChange={(e) => setJobDescription(e.target.value)}
-              onPaste={handlePasteClean}   // <-- NEW
-              placeholder="Paste the full job posting here… (or import from a link above)"
-            />
-            <div className="text-right text-xs text-gray-500 dark:text-gray-400">
-              {jobDescription.length.toLocaleString()} characters
+          {/* Centered card */}
+          <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+            {/* Upload */}
+            <div>
+              <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Upload Your Résumé (PDF or DOCX)</h2>
+              <input
+                type="file"
+                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className={inputBase}
+              />
+              {file?.name && <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {file.name}</div>}
+            </div>
+
+            {/* Import from link */}
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  className={`${inputBase} flex-1`}
+                  placeholder="https://careers.company.com/job/12345"
+                  value={jobUrl}
+                  onChange={(e) => setJobUrl(e.target.value)}
+                  type="url"
+                  inputMode="url"
+                />
+                <button
+                  onClick={importFromLink}
+                  disabled={importing || !jobUrl.trim()}
+                  className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50"
+                >
+                  {importing && <Spinner />}
+                  {importing ? "Importing…" : "Import from link"}
+                </button>
+              </div>
+              {importTitle && (
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <span className="font-semibold">Imported title:</span> {importTitle}
+                </p>
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                If a site blocks import, use the <a href="/import-helper" className="underline">bookmarklet</a> and paste here.
+              </p>
+            </div>
+
+            {/* JD textarea */}
+            <div>
+              <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
+              <textarea
+                className={`${taBase} h-72`}
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                onPaste={handlePasteClean}   // <-- NEW
+                placeholder="Paste the full job posting here… (or import from a link above)"
+              />
+              <div className="text-right text-xs text-gray-500 dark:text-gray-400">
+                {jobDescription.length.toLocaleString()} characters
+              </div>
+            </div>
+
+            {/* Generate + Progress */}
+            <div className="space-y-3">
+              <button
+                onClick={handleGenerateAll}
+                disabled={!isReadyToGenerate}
+                className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
+                title={!file ? "Upload a résumé to enable" : !jobDescription.trim() ? "Paste a job description to enable" : "Generate results"}
+              >
+                {loading && <Spinner />}
+                {loading ? "Generating…" : "Generate"}
+              </button>
+
+              {loading && (
+                <div className="w-full">
+                  <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 text-center">
+                    {status ? `${status} (${Math.min(progress, 100)}%)` : `${Math.min(progress, 100)}%`}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-
-          {/* Generate + Progress */}
-          <div className="space-y-3">
-            <button
-              onClick={handleGenerateAll}
-              disabled={loading}
-              className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
-            >
-              {loading && <Spinner />}
-              {loading ? "Generating…" : "Generate"}
-            </button>
-
-            {loading && (
-              <div className="w-full">
-                <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 text-center">
-                  {status ? `${status} (${Math.min(progress, 100)}%)` : `${Math.min(progress, 100)}%`}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
-      </div>
 
-      {/* Toast is handled on results page after redirect */}
+        {/* Toast is handled on results page after redirect */}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6">
+        <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
+          <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
+            © {currentYear} {BRAND}. All rights reserved.
+          </div>
+          <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
+            <a href="/privacy" className="hover:underline">Privacy</a>
+            <a href="/terms" className="hover:underline">Terms</a>
+            <a href="mailto:hello@example.com" className="hover:underline">Contact</a>
+          </nav>
+        </div>
+      </footer>
     </div>
   );
 }
