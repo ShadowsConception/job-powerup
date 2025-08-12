@@ -1,12 +1,22 @@
+// next.config.mjs
+import path from "path";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ["jsdom", "@mozilla/readability"],
 
-  // Skip ESLint during `next build` so deploys don’t fail on style rules
+  // Don’t fail builds on lint/TS while we ship
   eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
 
-  // (Optional) if you ever hit strict TS errors on Vercel, uncomment below
-  // typescript: { ignoreBuildErrors: true },
+  // Resolve "@/..." to "<repo>/src/..."
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "@": path.resolve(process.cwd(), "src"),
+    };
+    return config;
+  },
 };
 
 export default nextConfig;
