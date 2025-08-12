@@ -23,7 +23,7 @@ export default function Header({ showAuth = true }: { showAuth?: boolean }) {
   return (
     <header className="sticky top-0 z-40 bg-white/70 dark:bg-gray-950/70 backdrop-blur-md border-b border-gray-200 dark:border-gray-800">
       <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between gap-6">
-        {/* Brand on the LEFT */}
+        {/* Brand LEFT */}
         <a
           href="/"
           className="text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 rounded-xl px-2 py-1 hover:bg-gray-100/70 dark:hover:bg-gray-800/60"
@@ -78,7 +78,7 @@ export default function Header({ showAuth = true }: { showAuth?: boolean }) {
           </div>
         </nav>
 
-        {/* Auth on the RIGHT */}
+        {/* Auth RIGHT with white text */}
         <div className="ml-auto flex items-center gap-3">
           {showAuth && (
             <>

@@ -1,38 +1,38 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export async function POST(req: Request) {
+  const { messages = [], context = {} } = await req.json();
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function POST(req: NextRequest) {
-  try {
-    const { messages, context } = await req.json();
+  const sys = [
+    "You are Job PowerUp — a helpful, frank assistant for resume tailoring and interview prep.",
+    "Rules:",
+    "- Always use 'resume' (no accents).",
+    "- If you are not sure, say so briefly and ask for needed details.",
+    "- Prefer concrete rewrites, bullet examples, and structured steps.",
+    "- When the user pastes text with **bold**, preserve it (no quote blocks).",
+    "- Keep answers short and skimmable."
+  ].join("\n");
 
-    if (process.env.FORCE_MOCK_AI === "1") {
-      return NextResponse.json({ reply: "Mock: I’ll be candid—tell me what you want to improve and I’ll suggest edits." });
-    }
+  const ctx = [
+    "Context you may use if relevant:",
+    `Job description (may be long): ${context.jobDescription || "(none)"}`,
+    `Resume filename: ${context.resumeFilename || "(none)"}`,
+    `Resume text (if available): ${context.resumeText?.slice(0, 3000) || "(none)"}`,
+    `Existing improvements (if any): ${(context.improvements || "").slice(0, 2000)}`,
+    `Existing cover letter (if any): ${(context.coverLetter || "").slice(0, 2000)}`
+  ].join("\n");
 
-    const sys = `You are Job PowerUp — a friendly, *honest* career assistant.
-- Be candid about uncertainty: say "I don't know" or "I can't verify that" when appropriate.
-- Prefer concise, actionable advice. Use markdown (**bold**, lists) sparingly but clearly.
-- If assumptions are needed, call them out. Never invent facts (companies, pay, titles).
-- Use supplied context (resume improvements, cover letter, job description) to tailor responses.
-- If the user pastes content, suggest concrete rewrites with examples.`;
-
-    const conv = [
+  const rsp = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.5,
+    messages: [
       { role: "system", content: sys },
-      { role: "system", content: `Context JSON: ${JSON.stringify(context || {})}` },
-      ...(Array.isArray(messages) ? messages : []),
-    ];
+      { role: "system", content: ctx },
+      ...messages
+    ]
+  });
 
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      messages: conv as any,
-      temperature: 0.35,
-    });
-
-    const reply = completion.choices?.[0]?.message?.content?.trim() || "…";
-    return NextResponse.json({ reply });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Chat failed" }, { status: 500 });
-  }
+  return NextResponse.json({ reply: rsp.choices[0]?.message?.content || "" });
 }
