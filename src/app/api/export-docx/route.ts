@@ -1,27 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from "docx";
+import {
+  AlignmentType,
+  Document,
+  HeadingLevel,
+  Packer,
+  Paragraph,
+  TextRun,
+} from "docx";
 
-/** Minimal markdown → docx runs (bold, italic, bullets, headings) */
+/** Minimal markdown → docx runs (bold, italic, bullets, numbered) */
 function mdLineToRuns(line: string): TextRun[] {
   const runs: TextRun[] = [];
-  // Replace **bold** and *italic*
   const tokens = [];
   const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|[^*`]+)/g;
   const parts = line.match(regex) || [line];
   for (const part of parts) {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      tokens.push({ text: part.slice(2, -2), bold: true });
-    } else if (part.startsWith("*") && part.endsWith("*")) {
-      tokens.push({ text: part.slice(1, -1), italics: true });
-    } else if (part.startsWith("`") && part.endsWith("`")) {
-      tokens.push({ text: part.slice(1, -1) });
-    } else {
-      tokens.push({ text: part });
-    }
+    if (part.startsWith("**") && part.endsWith("**")) tokens.push({ text: part.slice(2, -2), bold: true });
+    else if (part.startsWith("*") && part.endsWith("*")) tokens.push({ text: part.slice(1, -1), italics: true });
+    else if (part.startsWith("`") && part.endsWith("`")) tokens.push({ text: part.slice(1, -1) });
+    else tokens.push({ text: part });
   }
-  for (const t of tokens) {
-    runs.push(new TextRun({ text: t.text, bold: !!(t as any).bold, italics: !!(t as any).italics }));
-  }
+  for (const t of tokens) runs.push(new TextRun({ text: t.text, bold: (t as any).bold, italics: (t as any).italics }));
   return runs;
 }
 
@@ -48,12 +47,13 @@ function mdToParagraphs(md: string): Paragraph[] {
 
     // Bullets
     if (/^[-*]\s+/.test(line)) {
-      paras.push(
-        new Paragraph({
-          bullet: { level: 0 },
-          children: mdLineToRuns(line.replace(/^[-*]\s+/, "")),
-        })
-      );
+      paras.push(new Paragraph({ bullet: { level: 0 }, children: mdLineToRuns(line.replace(/^[-*]\s+/, "")) }));
+      continue;
+    }
+
+    // Numbered list like "1. thing"
+    if (/^\d+\.\s+/.test(line)) {
+      paras.push(new Paragraph({ numbering: { reference: "numbered-list", level: 0 }, children: mdLineToRuns(line.replace(/^\d+\.\s+/, "")) }));
       continue;
     }
 
@@ -67,7 +67,6 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // Accept either {title, sections:[{heading, body}]} OR results payload
     const title: string = body.title || "Job PowerUp";
     const sections: Array<{ heading: string; body: string }> =
       body.sections ||
@@ -77,9 +76,52 @@ export async function POST(req: NextRequest) {
       ];
 
     const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: { font: "Times New Roman", size: 22 }, // 11pt
+            paragraph: { spacing: { line: 276, before: 120, after: 120 } }, // 1.15, +space
+          },
+        },
+        paragraphStyles: [
+          {
+            id: "Heading1",
+            name: "Heading 1",
+            basedOn: "Normal",
+            next: "Normal",
+            quickFormat: true,
+            run: { bold: true, size: 30 },
+            paragraph: { spacing: { before: 240, after: 120 } },
+          },
+          {
+            id: "Heading2",
+            name: "Heading 2",
+            basedOn: "Normal",
+            next: "Normal",
+            quickFormat: true,
+            run: { bold: true, size: 28 },
+            paragraph: { spacing: { before: 180, after: 90 } },
+          },
+        ],
+      },
+      numbering: {
+        config: [
+          {
+            reference: "numbered-list",
+            levels: [
+              {
+                level: 0,
+                format: "decimal",
+                text: "%1.",
+                alignment: AlignmentType.START,
+              },
+            ],
+          },
+        ],
+      },
       sections: [
         {
-          properties: {},
+          properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } }, // 1" margins
           children: [
             new Paragraph({
               text: title,

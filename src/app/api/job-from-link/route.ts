@@ -14,7 +14,7 @@ async function fetchPage(url: string) {
 function extractText(html: string) {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
-  // Prefer main/article/job containers
+
   const target =
     $("main:contains(job), main")?.first().text() ||
     $("article:contains(job), article")?.first().text() ||
@@ -33,27 +33,25 @@ function extractText(html: string) {
 }
 
 async function expandWithAI(raw: string, pageTitle: string | undefined) {
-  // If FORCE_MOCK_AI is set, just return raw
   if (process.env.FORCE_MOCK_AI === "1") return raw;
 
-  const sys = `You are Job PowerUp, expanding job postings into a comprehensive, detailed description.
-- Keep it factual to the source; do not invent employer names if missing.
-- Output in markdown with headings, bullets, and bold keywords.
-- Sections (if possible): Role Summary, Responsibilities (expanded/verbose), Required Qualifications, Preferred Qualifications, Tech/Tools, Soft Skills, Impact, Keywords.
-- Be as detailed as possible while staying relevant to the role.
-- Avoid marketing fluff; focus on concrete requirements and responsibilities.`;
+  const sys = `You are Job PowerUp. Rewrite messy job postings into a clean, concise, *job-relevant* description.
+- Keep all requirements/responsibilities, skills, years of experience, education, location, compensation, and tech stack.
+- Remove irrelevant fluff: company marketing blurbs, DEI statements, application instructions, cookie banners, unrelated disclaimers.
+- De-duplicate and merge similar bullets. Normalize formatting.
+- Output in markdown with headings and bullets. Use **bold** for key skills/requirements.`;
 
   const usr = `Original page title: ${pageTitle || "N/A"}
-Extracted job text (may be messy):
+Raw extracted text (may include noise):
 
 """${raw}"""
 
-Rewrite into a clean, **long-form**, highly detailed job description for the same role, preserving all details but organizing them clearly.`;
+Summarize into a *concise but complete* job description that preserves job-relevant details only. Avoid repetition.`;
 
   const completion = await openai.chat.completions.create({
     model: process.env.OPENAI_MODEL || "gpt-4o-mini",
     messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
-    temperature: 0.5,
+    temperature: 0.3,
   });
 
   const out = completion.choices?.[0]?.message?.content?.trim() || raw;
@@ -62,14 +60,15 @@ Rewrite into a clean, **long-form**, highly detailed job description for the sam
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, detail } = await req.json();
+    const { url } = await req.json();
     if (!url) return NextResponse.json({ error: "Missing url" }, { status: 400 });
 
     const html = await fetchPage(url);
     const { text, title } = extractText(html);
     if (!text || text.length < 200) throw new Error("No readable content found at that link.");
 
-    const finalText = detail === "max" ? await expandWithAI(text, title) : text;
+    // Summarize + clean
+    const finalText = await expandWithAI(text, title);
 
     return NextResponse.json({ text: finalText, title: title || undefined });
   } catch (e: any) {

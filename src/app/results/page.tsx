@@ -150,7 +150,7 @@ function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 function renderBasicMarkdown(md: string) {
-  // very light renderer: **bold**, *italic*, lists, line breaks
+  // very light renderer: **bold**, *italic*, bullets, line breaks
   let html = escapeHtml(md);
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
@@ -169,6 +169,13 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [showHint, setShowHint] = useState(false);
+
+  // show hint once
+  useEffect(() => {
+    const seen = localStorage.getItem("jp_seen_chat_hint");
+    if (!seen) setShowHint(true);
+  }, []);
 
   async function send() {
     const text = input.trim();
@@ -193,17 +200,32 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
     }
   }
 
+  function onOpen() {
+    setOpen(true);
+    if (showHint) {
+      setShowHint(false);
+      localStorage.setItem("jp_seen_chat_hint", "1");
+    }
+  }
+
   return (
     <>
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg p-4 bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white"
-          aria-label="Open Job PowerUp chat"
-          title="Chat with Job PowerUp"
-        >
-          💬
-        </button>
+        <>
+          <button
+            onClick={onOpen}
+            className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg p-4 bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white"
+            aria-label="Open Job PowerUp chat"
+            title="Chat with Job PowerUp"
+          >
+            💬
+          </button>
+          {showHint && (
+            <div className="fixed bottom-20 right-6 z-50 text-xs rounded-xl px-3 py-2 bg-gray-900 text-white shadow-lg">
+              Chat with Job PowerUp →
+            </div>
+          )}
+        </>
       )}
       {open && (
         <div className="fixed bottom-6 right-6 z-50 w-[min(90vw,380px)] rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-2xl overflow-hidden">
@@ -230,6 +252,15 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
                 />
               </div>
             ))}
+            {busy && (
+              <div className="text-sm">
+                <span className="inline-flex items-center gap-1 rounded-2xl px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                  <span className="typing-dot animate-bounce" style={{ animationDelay: "0ms" }}>•</span>
+                  <span className="typing-dot animate-bounce" style={{ animationDelay: "120ms" }}>•</span>
+                  <span className="typing-dot animate-bounce" style={{ animationDelay: "240ms" }}>•</span>
+                </span>
+              </div>
+            )}
           </div>
           <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex gap-2">
             <input
@@ -243,6 +274,11 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
               {busy ? <span className="inline-flex items-center"><Spinner />Send…</span> : "Send"}
             </button>
           </div>
+
+          <style jsx>{`
+            @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } }
+            .typing-dot { display:inline-block; font-size:28px; line-height:1; animation: bounce 1.2s infinite ease-in-out; }
+          `}</style>
         </div>
       )}
     </>
@@ -275,8 +311,8 @@ export default function ResultsPage() {
   const [quizIdx, setQuizIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const [previewImprove, setPreviewImprove] = useState(false);
-  const [previewCover, setPreviewCover] = useState(false);
+  const [previewImprove, setPreviewImprove] = useState(true);  // default to preview for nicer look
+  const [previewCover, setPreviewCover] = useState(true);
 
   const [loadingMoreQuiz, setLoadingMoreQuiz] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -296,7 +332,6 @@ export default function ResultsPage() {
 
   // Buttons (higher contrast)
   const btnPrimary = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700 active:scale-[.99] disabled:opacity-50";
-  const btnDark = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm text-white bg-gray-900 hover:bg-black active:scale-[.99] disabled:opacity-50";
   const btnGhost = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]";
 
   useEffect(() => {
@@ -326,9 +361,7 @@ export default function ResultsPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    function onScroll() {
-      setShowTop(window.scrollY > 420);
-    }
+    function onScroll() { setShowTop(window.scrollY > 420); }
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -355,11 +388,6 @@ export default function ResultsPage() {
     }
   }, [activeTab, improvements, coverLetter, improveDirty, coverDirty]);
 
-  async function copy(text: string) {
-    try { await navigator.clipboard.writeText(text); setToastMsg("Copied ✅"); }
-    catch { setToastMsg("Copy failed"); }
-  }
-
   async function downloadDocx(title: string, body: string) {
     if (!body?.trim()) return;
     try {
@@ -367,7 +395,7 @@ export default function ResultsPage() {
       const res = await fetch("/api/export-docx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, sections: [{ heading: title, body }] }), // send markdown; API keeps **bold**
+        body: JSON.stringify({ title, sections: [{ heading: title, body }] }), // markdown kept for **bold**
       });
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
@@ -375,6 +403,33 @@ export default function ResultsPage() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `${title.replace(/[^\w.-]+/g, "_").toLowerCase()}.docx`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+      setToastMsg("DOCX downloaded 📄");
+    } catch { setToastMsg("Export failed"); }
+    finally { setDownloading(false); }
+  }
+
+  async function downloadBoth() {
+    try {
+      setDownloading(true);
+      const res = await fetch("/api/export-docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "job-powerup-results",
+          sections: [
+            { heading: "Resume Improvements", body: improvements || "" },
+            { heading: "Cover Letter", body: coverLetter || "" },
+          ],
+        }),
+      });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `job-powerup-results.docx`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       setToastMsg("DOCX downloaded 📄");
@@ -412,10 +467,10 @@ export default function ResultsPage() {
   }, [quiz, quizIdx]);
   function nextCard() { if (!quiz.length) return; setDirection(1); setShowAnswer(false); setQuizIdx((i) => (i + 1) % quiz.length); }
   function prevCard() { if (!quiz.length) return; setDirection(-1); setShowAnswer(false); setQuizIdx((i) => (i - 1 + quiz.length) % quiz.length); }
-  function onTouchStart(e: React.TouchEvent) { touchStartX.current = e.changedTouches[0].clientX; }
+  function onTouchStart(e: React.TouchEvent) { (touchStartX as any).current = e.changedTouches[0].clientX; }
   function onTouchEnd(e: React.TouchEvent) {
     if (touchStartX.current == null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dx = e.changedTouches[0].clientX - (touchStartX.current as number);
     if (Math.abs(dx) > 40) { dx < 0 ? nextCard() : prevCard(); }
     touchStartX.current = null;
   }
@@ -444,7 +499,7 @@ export default function ResultsPage() {
       <Header toolsOpen={toolsOpen} helpOpen={helpOpen} openWithCancel={openWithCancel} closeWithDelay={closeWithDelay} />
 
       {/* Title */}
-      <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
+      <div className="mx-auto max-w-4xl px-6 pt-10 pb-4 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
           {title}{jobTitle ? ` — ${jobTitle}` : ""}
         </h1>
@@ -452,6 +507,11 @@ export default function ResultsPage() {
           Tailored improvements, a cover letter, and interview practice.
           <span className="ml-2 text-gray-400 dark:text-gray-500 text-sm">JD chars: {jobDescriptionChars.toLocaleString()}</span>
         </p>
+        <div className="mt-4 flex items-center justify-center">
+          <button onClick={downloadBoth} disabled={downloading} className={btnPrimary}>
+            {downloading ? <span className="inline-flex items-center"><Spinner />Preparing…</span> : "Download both as DOCX"}
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -462,7 +522,7 @@ export default function ResultsPage() {
               {[
                 { id: "improve", label: "Resume Improvements" },
                 { id: "cover", label: "Cover Letter" },
-                { id: "quiz", label: "Interview Questions" }, // ← full text
+                { id: "quiz", label: "Interview Questions" },
               ].map((t) => {
                 const active = activeTab === (t.id as any);
                 return (
@@ -484,7 +544,7 @@ export default function ResultsPage() {
           </div>
 
           <div ref={panelRef} className="space-y-6">
-            {/* Improvements (editable + preview) */}
+            {/* Improvements (edit or preview; Save only) */}
             {activeTab === "improve" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
@@ -493,7 +553,6 @@ export default function ResultsPage() {
                     <button onClick={() => setPreviewImprove((v) => !v)} className={btnGhost}>
                       {previewImprove ? "Edit" : "Preview formatting"}
                     </button>
-                    <button onClick={() => copy(improvements)} className={btnDark}>Copy</button>
                     <button
                       onClick={() => downloadDocx("resume-improvements", improvements)}
                       className={btnPrimary}
@@ -518,7 +577,7 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Cover Letter (editable + preview) */}
+            {/* Cover Letter (edit or preview; Save only) */}
             {activeTab === "cover" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
@@ -527,7 +586,6 @@ export default function ResultsPage() {
                     <button onClick={() => setPreviewCover((v) => !v)} className={btnGhost}>
                       {previewCover ? "Edit" : "Preview formatting"}
                     </button>
-                    <button onClick={() => copy(coverLetter)} className={btnDark}>Copy</button>
                     <button
                       onClick={() => downloadDocx("cover-letter", coverLetter)}
                       className={btnPrimary}
@@ -552,7 +610,7 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {/* Interview Flashcards (with swipe + keyboard) */}
+            {/* Interview Flashcards */}
             {activeTab === "quiz" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-4">
@@ -595,7 +653,7 @@ export default function ResultsPage() {
 
                     <div className="mt-4 flex flex-wrap gap-3">
                       <button onClick={prevCard} className={btnGhost}>◀ Prev</button>
-                      <button onClick={() => setShowAnswer((s) => !s)} className={btnDark}>
+                      <button onClick={() => setShowAnswer((s) => !s)} className={btnGhost}>
                         {showAnswer ? "Hide Ideal Answer" : "Show Ideal Answer"}
                       </button>
                       <button onClick={nextCard} className={btnGhost}>Next ▶</button>
