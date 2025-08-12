@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Header from "@/components/Header";
 
-/** ========= Types ========= */
 type QuizItem = { question: string; idealAnswer?: string };
 type ResultsPayload = {
   improvements: string;
@@ -12,7 +12,6 @@ type ResultsPayload = {
   resumeFilename: string;
 };
 
-/** ========= Small UI bits ========= */
 function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -34,144 +33,33 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   );
 }
 
-function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-    </button>
-  );
-}
-
-/** ========= Header (matches landing; no login/sign-up/back) ========= */
-function Header({
-  toolsOpen, helpOpen, openWithCancel, closeWithDelay,
-}: {
-  toolsOpen: boolean;
-  helpOpen: boolean;
-  openWithCancel: (which: "tools" | "help") => void;
-  closeWithDelay: (which: "tools" | "help") => void;
-}) {
-  return (
-    <header className="border-b border-gray-200 dark:border-gray-800">
-      <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
-        <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-          Job PowerUp
-        </a>
-
-        <nav className="hidden md:flex items-center gap-8 text-sm relative">
-          {/* Tools */}
-          <div
-            className="relative"
-            onMouseEnter={() => openWithCancel("tools")}
-            onMouseLeave={() => closeWithDelay("tools")}
-          >
-            <button className="text-gray-700 dark:text-gray-300 hover:opacity-80" aria-haspopup="menu" aria-expanded={toolsOpen}>
-              Tools ▾
-            </button>
-            {toolsOpen && (
-              <div
-                className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
-                onMouseEnter={() => openWithCancel("tools")}
-                onMouseLeave={() => closeWithDelay("tools")}
-              >
-                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/">
-                  PowerUp My Resume
-                </a>
-                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">
-                  Results
-                </a>
-              </div>
-            )}
-          </div>
-
-          {/* Help */}
-          <div
-            className="relative"
-            onMouseEnter={() => openWithCancel("help")}
-            onMouseLeave={() => closeWithDelay("help")}
-          >
-            <button className="text-gray-700 dark:text-gray-300 hover:opacity-80" aria-haspopup="menu" aria-expanded={helpOpen}>
-              Help ▾
-            </button>
-            {helpOpen && (
-              <div
-                className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
-                onMouseEnter={() => openWithCancel("help")}
-                onMouseLeave={() => closeWithDelay("help")}
-              >
-                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">
-                  Privacy
-                </a>
-                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/terms">
-                  Terms
-                </a>
-                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/contact">
-                  Contact
-                </a>
-              </div>
-            )}
-          </div>
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-        </div>
-      </div>
-    </header>
-  );
-}
-
-/** ========= Markdown helpers ========= */
+/** markdown helpers */
 function stripWrappingQuotes(s: string) {
   const t = s.trim();
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("“") && t.endsWith("”"))) {
-    return t.slice(1, -1).trim();
-  }
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("“") && t.endsWith("”"))) return t.slice(1, -1).trim();
   return s;
 }
 function escapeHtml(s: string) {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 function renderBasicMarkdown(md: string) {
-  // very light renderer: **bold**, *italic*, bullets, line breaks
   let html = escapeHtml(md);
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
-  // bullets
   html = html.replace(/^(?:-|\*)\s+(.+)$/gm, "<li>$1</li>");
-  html = html.replace(/(<li>.*<\/li>)/gs, "<ul>$1</ul>");
-  // paragraphs
+  html = html.replace(/(<li>.*<\/li>)/gs, "<ul class='list-disc pl-6'>$1</ul>");
   html = html.replace(/\n{2,}/g, "</p><p>");
-  html = `<p>${html}</p>`;
-  return html;
+  return `<p>${html}</p>`;
 }
 
-/** ========= Chat bubble ========= */
-function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
+/** —— Chat bubble, cleaner UI, typing dots, takes JD + resumeText —— */
+function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { resumeText?: string } }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [showHint, setShowHint] = useState(false);
 
-  // show hint once
   useEffect(() => {
     const seen = localStorage.getItem("jp_seen_chat_hint");
     if (!seen) setShowHint(true);
@@ -191,7 +79,7 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
         body: JSON.stringify({ messages: nextMsgs, context }),
       });
       const data = await res.json().catch(() => ({}));
-      const reply = data?.reply || "Sorry, I couldn't think of anything useful 😅";
+      const reply = data?.reply || "Sorry—I'm not sure. Could you rephrase?";
       setMessages([...nextMsgs, { role: "assistant", content: reply }]);
     } catch {
       setMessages([...nextMsgs, { role: "assistant", content: "Network hiccup — try again?" }]);
@@ -214,7 +102,7 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
         <>
           <button
             onClick={onOpen}
-            className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg p-4 bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white"
+            className="fixed bottom-6 right-6 z-50 rounded-full shadow-lg p-4 bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600 text-white"
             aria-label="Open Job PowerUp chat"
             title="Chat with Job PowerUp"
           >
@@ -229,10 +117,11 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
       )}
       {open && (
         <div className="fixed bottom-6 right-6 z-50 w-[min(90vw,380px)] rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-            <div className="font-semibold text-gray-900 dark:text-gray-100">Job PowerUp Bot</div>
-            <button onClick={() => setOpen(false)} className="text-gray-500 hover:text-gray-900 dark:hover:text-gray-100">✕</button>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600 text-white">
+            <div className="font-semibold">Job PowerUp Bot</div>
+            <button onClick={() => setOpen(false)} className="opacity-90 hover:opacity-100">✕</button>
           </div>
+
           <div className="h-72 overflow-auto p-3 space-y-3">
             {messages.length === 0 && (
               <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -240,70 +129,62 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> }) {
               </div>
             )}
             {messages.map((m, i) => (
-              <div key={i} className={`text-sm ${m.role === "user" ? "text-right" : ""}`}>
-                <div
-                  className={[
-                    "inline-block rounded-2xl px-3 py-2",
-                    m.role === "user"
-                      ? "bg-indigo-600 text-white"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100",
-                  ].join(" ")}
-                  dangerouslySetInnerHTML={{ __html: m.role === "assistant" ? renderBasicMarkdown(m.content) : escapeHtml(m.content) }}
-                />
+              <div key={i} className={`text-sm flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`flex items-start gap-2 max-w-[85%] ${m.role === "user" ? "flex-row-reverse" : ""}`}>
+                  <div className={`h-7 w-7 rounded-full grid place-items-center ${m.role === "user" ? "bg-indigo-600 text-white" : "bg-emerald-600 text-white"}`}>
+                    {m.role === "user" ? "🙂" : "🤖"}
+                  </div>
+                  <div
+                    className={[
+                      "rounded-2xl px-3 py-2",
+                      m.role === "user"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100",
+                    ].join(" ")}
+                    dangerouslySetInnerHTML={{ __html: m.role === "assistant" ? renderBasicMarkdown(m.content) : escapeHtml(m.content) }}
+                  />
+                </div>
               </div>
             ))}
             {busy && (
-              <div className="text-sm">
-                <span className="inline-flex items-center gap-1 rounded-2xl px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-                  <span className="typing-dot animate-bounce" style={{ animationDelay: "0ms" }}>•</span>
-                  <span className="typing-dot animate-bounce" style={{ animationDelay: "120ms" }}>•</span>
-                  <span className="typing-dot animate-bounce" style={{ animationDelay: "240ms" }}>•</span>
-                </span>
+              <div className="text-sm flex justify-start">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-full grid place-items-center bg-emerald-600 text-white">🤖</div>
+                  <div className="rounded-2xl px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:0ms]" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:120ms] ml-1" />
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-bounce [animation-delay:240ms] ml-1" />
+                  </div>
+                </div>
               </div>
             )}
           </div>
+
           <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex gap-2">
             <input
-              className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="Ask anything about this job…"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !busy && send()}
             />
-            <button onClick={send} disabled={busy} className="rounded-xl px-3 py-2 text-sm text-white bg-gray-900 hover:bg-black disabled:opacity-50">
-              {busy ? <span className="inline-flex items-center"><Spinner />Send…</span> : "Send"}
+            <button
+              onClick={send}
+              disabled={busy}
+              className="rounded-xl px-3 py-2 text-sm text-white bg-gray-900 hover:bg-black disabled:opacity-50"
+              title="Send"
+            >
+              ➤
             </button>
           </div>
-
-          <style jsx>{`
-            @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } }
-            .typing-dot { display:inline-block; font-size:28px; line-height:1; animation: bounce 1.2s infinite ease-in-out; }
-          `}</style>
         </div>
       )}
     </>
   );
 }
 
-/** ========= Page ========= */
 export default function ResultsPage() {
-  // Header dropdowns
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const toolsTimer = useRef<number | null>(null);
-  const helpTimer = useRef<number | null>(null);
-  const openWithCancel = (which: "tools" | "help") => {
-    const t = which === "tools" ? toolsTimer : helpTimer;
-    if (t.current) window.clearTimeout(t.current);
-    (which === "tools" ? setToolsOpen : setHelpOpen)(true);
-  };
-  const closeWithDelay = (which: "tools" | "help") => {
-    const t = which === "tools" ? toolsTimer : helpTimer;
-    if (t.current) window.clearTimeout(t.current);
-    t.current = window.setTimeout(() => { (which === "tools" ? setToolsOpen : setHelpOpen)(false); }, 180);
-  };
-
-  // Data + UI
+  // state
   const [activeTab, setActiveTab] = useState<"improve" | "cover" | "quiz">("improve");
   const [improvements, setImprovements] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
@@ -311,27 +192,21 @@ export default function ResultsPage() {
   const [quizIdx, setQuizIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const [previewImprove, setPreviewImprove] = useState(true);  // default to preview for nicer look
+  const [previewImprove, setPreviewImprove] = useState(true);
   const [previewCover, setPreviewCover] = useState(true);
 
   const [loadingMoreQuiz, setLoadingMoreQuiz] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [resumeFilename, setResumeFilename] = useState("");
+  const [resumeText, setResumeText] = useState<string>("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [jobDescriptionChars, setJobDescriptionChars] = useState(0);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [showTop, setShowTop] = useState(false);
-
-  const [improveDirty, setImproveDirty] = useState(false);
-  const [coverDirty, setCoverDirty] = useState(false);
-
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const prevTabRef = useRef<"improve" | "cover" | "quiz">("improve");
-  const saveTimerRef = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
 
-  // Buttons (higher contrast)
-  const btnPrimary = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700 active:scale-[.99] disabled:opacity-50";
+  const btnPrimary = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm text-white bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600 hover:from-indigo-700 hover:via-violet-700 hover:to-emerald-700 active:scale-[.99] disabled:opacity-50";
   const btnGhost = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]";
 
   useEffect(() => {
@@ -345,20 +220,14 @@ export default function ResultsPage() {
         setResumeFilename(parsed.resumeFilename || "");
         setJobDescriptionChars((parsed.jobDescription || "").length || 0);
       }
-      const toast = sessionStorage.getItem("jp_toast");
-      if (toast) {
-        setToastMsg(toast);
-        sessionStorage.removeItem("jp_toast");
-      }
       const t = sessionStorage.getItem("jp_import_title");
       if (t && t.trim()) setJobTitle(t.trim());
+      const rt = sessionStorage.getItem("jp_resume_text");
+      if (rt) setResumeText(rt);
+      const toast = sessionStorage.getItem("jp_toast");
+      if (toast) { setToastMsg(toast); sessionStorage.removeItem("jp_toast"); }
     } catch {}
   }, []);
-
-  useEffect(() => {
-    if (panelRef.current) panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    else window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeTab]);
 
   useEffect(() => {
     function onScroll() { setShowTop(window.scrollY > 420); }
@@ -366,75 +235,31 @@ export default function ResultsPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  function scheduleSave(field: "improvements" | "coverLetter", value: string) {
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      const raw = sessionStorage.getItem("jp_results");
-      let parsed: any = {};
-      try { parsed = raw ? JSON.parse(raw) : {}; } catch {}
-      parsed[field] = value;
-      sessionStorage.setItem("jp_results", JSON.stringify(parsed));
-    }, 350);
-  }
-
   useEffect(() => {
-    const prev = prevTabRef.current;
-    if (prev !== activeTab) {
-      let saved = false;
-      if (prev === "improve" && improveDirty) { scheduleSave("improvements", improvements); setImproveDirty(false); saved = true; }
-      if (prev === "cover" && coverDirty) { scheduleSave("coverLetter", coverLetter); setCoverDirty(false); saved = true; }
-      if (saved) setToastMsg("Saved 💾");
-      prevTabRef.current = activeTab;
-    }
-  }, [activeTab, improvements, coverLetter, improveDirty, coverDirty]);
+    if (panelRef.current) panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    else window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [activeTab]);
+
+  const title = useMemo(() => (resumeFilename ? `Results for ${resumeFilename}` : "Your Results"), [resumeFilename]);
+  const taBase =
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-4 text-base leading-relaxed bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y";
 
   async function downloadDocx(title: string, body: string) {
     if (!body?.trim()) return;
     try {
       setDownloading(true);
       const res = await fetch("/api/export-docx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, sections: [{ heading: title, body }] }), // markdown kept for **bold**
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, sections: [{ heading: title, body }] }),
       });
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+      const a = document.createElement("a"); a.href = url;
       a.download = `${title.replace(/[^\w.-]+/g, "_").toLowerCase()}.docx`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
       setToastMsg("DOCX downloaded 📄");
-    } catch { setToastMsg("Export failed"); }
-    finally { setDownloading(false); }
-  }
-
-  async function downloadBoth() {
-    try {
-      setDownloading(true);
-      const res = await fetch("/api/export-docx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "job-powerup-results",
-          sections: [
-            { heading: "Resume Improvements", body: improvements || "" },
-            { heading: "Cover Letter", body: coverLetter || "" },
-          ],
-        }),
-      });
-      if (!res.ok) throw new Error("Export failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `job-powerup-results.docx`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-      setToastMsg("DOCX downloaded 📄");
-    } catch { setToastMsg("Export failed"); }
-    finally { setDownloading(false); }
+    } catch { setToastMsg("Export failed"); } finally { setDownloading(false); }
   }
 
   async function regenerateQuestions() {
@@ -450,11 +275,10 @@ export default function ResultsPage() {
       const items = Array.isArray(body?.items) ? body.items : [];
       setQuiz(items); setQuizIdx(0); setShowAnswer(false); setDirection(1);
       setToastMsg("New questions 🔄");
-    } catch { setToastMsg("Couldn't refresh questions"); }
-    finally { setLoadingMoreQuiz(false); }
+    } catch { setToastMsg("Couldn't refresh questions"); } finally { setLoadingMoreQuiz(false); }
   }
 
-  // Flashcard keyboard + swipe
+  // flashcards
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (!quiz.length) return;
@@ -475,15 +299,12 @@ export default function ResultsPage() {
     touchStartX.current = null;
   }
 
-  const title = useMemo(() => (resumeFilename ? `Results for ${resumeFilename}` : "Your Results"), [resumeFilename]);
-  const taBase = "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y";
-
-  // Empty state
+  // empty state
   if (!improvements && !coverLetter && !quiz.length) {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-        <Header toolsOpen={toolsOpen} helpOpen={helpOpen} openWithCancel={openWithCancel} closeWithDelay={closeWithDelay} />
-        <main className="flex-1 flex items-center justify-center">
+        <Header />
+        <main className="flex-1 grid place-items-center">
           <div className="text-center px-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">No results yet</h1>
             <p className="text-gray-600 dark:text-gray-400 mb-6">Upload a resume and job description to generate results.</p>
@@ -496,7 +317,7 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <Header toolsOpen={toolsOpen} helpOpen={helpOpen} openWithCancel={openWithCancel} closeWithDelay={closeWithDelay} />
+      <Header />
 
       {/* Title */}
       <div className="mx-auto max-w-4xl px-6 pt-10 pb-4 text-center">
@@ -507,11 +328,6 @@ export default function ResultsPage() {
           Tailored improvements, a cover letter, and interview practice.
           <span className="ml-2 text-gray-400 dark:text-gray-500 text-sm">JD chars: {jobDescriptionChars.toLocaleString()}</span>
         </p>
-        <div className="mt-4 flex items-center justify-center">
-          <button onClick={downloadBoth} disabled={downloading} className={btnPrimary}>
-            {downloading ? <span className="inline-flex items-center"><Spinner />Preparing…</span> : "Download both as DOCX"}
-          </button>
-        </div>
       </div>
 
       {/* Tabs */}
@@ -532,7 +348,7 @@ export default function ResultsPage() {
                     className={[
                       "px-4 py-2 text-sm rounded-xl transition-colors",
                       active
-                        ? "text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600"
+                        ? "text-white bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600"
                         : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800",
                     ].join(" ")}
                   >
@@ -544,13 +360,16 @@ export default function ResultsPage() {
           </div>
 
           <div ref={panelRef} className="space-y-6">
-            {/* Improvements (edit or preview; Save only) */}
+            {/* Improvements */}
             {activeTab === "improve" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">How to Improve Your Resume</h2>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setPreviewImprove((v) => !v)} className={btnGhost}>
+                    <button
+                      onClick={() => setPreviewImprove((v) => !v)}
+                      className={btnGhost}
+                    >
                       {previewImprove ? "Edit" : "Preview formatting"}
                     </button>
                     <button
@@ -562,22 +381,25 @@ export default function ResultsPage() {
                     </button>
                   </div>
                 </div>
+
                 {!previewImprove ? (
                   <textarea
                     className={`${taBase} h-[32rem]`}
                     value={improvements}
-                    onChange={(e) => { setImprovements(e.target.value); setImproveDirty(true); scheduleSave("improvements", e.target.value); }}
+                    onChange={(e) => setImprovements(e.target.value)}
                   />
                 ) : (
                   <div className="prose dark:prose-invert max-w-none">
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-900"
-                         dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(improvements) }} />
+                    <div
+                      className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950"
+                      dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(improvements) }}
+                    />
                   </div>
                 )}
               </div>
             )}
 
-            {/* Cover Letter (edit or preview; Save only) */}
+            {/* Cover Letter */}
             {activeTab === "cover" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
@@ -595,22 +417,25 @@ export default function ResultsPage() {
                     </button>
                   </div>
                 </div>
+
                 {!previewCover ? (
                   <textarea
-                    className={`${taBase} h-[26rem]`}
+                    className={`${taBase} h-[28rem]`}
                     value={coverLetter}
-                    onChange={(e) => { setCoverLetter(e.target.value); setCoverDirty(true); scheduleSave("coverLetter", e.target.value); }}
+                    onChange={(e) => setCoverLetter(e.target.value)}
                   />
                 ) : (
                   <div className="prose dark:prose-invert max-w-none">
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-4 bg-gray-50 dark:bg-gray-900"
-                         dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(coverLetter) }} />
+                    <div
+                      className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 leading-7"
+                      dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(coverLetter) }}
+                    />
                   </div>
                 )}
               </div>
             )}
 
-            {/* Interview Flashcards */}
+            {/* Interview */}
             {activeTab === "quiz" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-4">
@@ -628,7 +453,7 @@ export default function ResultsPage() {
                       <span>Card {quizIdx + 1} / {quiz.length}</span>
                       <div className="flex gap-1">
                         {quiz.map((_, i) => (
-                          <span key={i} className={["inline-block h-2 w-2 rounded-full", i === quizIdx ? "bg-indigo-600" : "bg-gray-300 dark:bg-gray-700"].join(" ")} />
+                          <span key={i} className={["inline-block h-2 w-2 rounded-full", i === quizIdx ? "bg-emerald-600" : "bg-gray-300 dark:bg-gray-700"].join(" ")} />
                         ))}
                       </div>
                     </div>
@@ -637,14 +462,14 @@ export default function ResultsPage() {
                       <div
                         key={`${quizIdx}-${showAnswer}`}
                         className={[
-                          "p-5 md:p-6 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-50 dark:bg-gray-900 shadow-sm",
+                          "p-5 md:p-6 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-50/60 dark:bg-gray-900/60 shadow-sm",
                           direction === 1 ? "animate-slideInNext" : "animate-slideInPrev",
                         ].join(" ")}
                       >
                         <p className="font-medium text-gray-900 dark:text-gray-100">{quiz[quizIdx].question}</p>
                         {showAnswer && (
                           <p className="mt-3 text-gray-800 dark:text-gray-200 leading-relaxed">
-                            <span className="px-2 py-0.5 rounded-lg bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100 mr-2 text-xs">Ideal</span>
+                            <span className="px-2 py-0.5 rounded-lg bg-amber-200 text-amber-900 dark:bg-amber-300 dark:text-amber-900 mr-2 text-xs">Ideal</span>
                             {quiz[quizIdx].idealAnswer || "—"}
                           </p>
                         )}
@@ -652,11 +477,11 @@ export default function ResultsPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-3">
-                      <button onClick={prevCard} className={btnGhost}>◀ Prev</button>
+                      <button onClick={() => { setShowAnswer(false); setDirection(-1); setQuizIdx((i) => (i - 1 + quiz.length) % quiz.length); }} className={btnGhost}>◀ Prev</button>
                       <button onClick={() => setShowAnswer((s) => !s)} className={btnGhost}>
                         {showAnswer ? "Hide Ideal Answer" : "Show Ideal Answer"}
                       </button>
-                      <button onClick={nextCard} className={btnGhost}>Next ▶</button>
+                      <button onClick={() => { setShowAnswer(false); setDirection(1); setQuizIdx((i) => (i + 1) % quiz.length); }} className={btnGhost}>Next ▶</button>
                     </div>
 
                     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Tip: use ← / → to switch, press “A” to toggle answer.</p>
@@ -673,9 +498,31 @@ export default function ResultsPage() {
             )}
           </div>
 
-          <div className="h-12" />
+          <div className="h-16" />
         </div>
       </main>
+
+      {/* Centered back-to-top arrow */}
+      {showTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 rounded-full h-10 w-10 grid place-items-center border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow"
+          title="Back to top"
+        >
+          ↑
+        </button>
+      )}
+
+      {/* Chat bubble with full context */}
+      <AssistantBubble
+        context={{
+          improvements,
+          coverLetter,
+          jobDescription: (JSON.parse(sessionStorage.getItem("jp_results") || "{}")?.jobDescription) || "",
+          resumeFilename,
+          resumeText, // from validate/analyze (see change below)
+        }}
+      />
 
       {/* Footer */}
       <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
@@ -690,19 +537,6 @@ export default function ResultsPage() {
           </nav>
         </div>
       </footer>
-
-      {/* Back-to-top pill */}
-      {showTop && (
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="fixed bottom-6 left-6 z-40 rounded-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow"
-        >
-          ↑ Back to top
-        </button>
-      )}
-
-      {/* Chat bubble (uses OpenAI via /api/assistant-chat) */}
-      <AssistantBubble context={{ improvements, coverLetter, jobDescription: "", resumeFilename }} />
 
       {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
     </div>

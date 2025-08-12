@@ -100,34 +100,34 @@ export default function LandingPage() {
     "inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
   // Import job link (with spinner)
-  async function importFromLink() {
-    if (!jobUrl.trim()) {
-      alert("Paste a job posting link first.");
-      return;
-    }
-    try {
-      setImporting(true);
-      const res = await fetch("/api/job-from-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: jobUrl.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `Import failed (${res.status}).`);
-      const text: string = data?.text || "";
-      const title: string | undefined = data?.title;
-      if (!text) throw new Error("No readable content found at that link.");
-      setJobDescription(text);
-      setImportTitle(title || null);
-      sessionStorage.setItem("jp_resume_jobDescription", text);
-      if (title) sessionStorage.setItem("jp_import_title", title);
-      sessionStorage.setItem("jp_toast", "Imported job description from link ✅");
-    } catch (e: any) {
-      alert(String(e?.message || "Could not import from that link."));
-    } finally {
-      setImporting(false);
-    }
+ async function importFromLink() {
+  if (!jobUrl.trim()) {
+    alert("Paste a job posting link first.");
+    return;
   }
+  try {
+    setImporting(true);
+    const res = await fetch("/api/job-from-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: jobUrl.trim(), detail: "max" }), // ← ask for maximum detail
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Import failed (${res.status}).`);
+    const text: string = data?.text || "";
+    const title: string | undefined = data?.title;
+    if (!text) throw new Error("No readable content found at that link.");
+    setJobDescription(text);
+    setImportTitle(title || null);
+    sessionStorage.setItem("jp_resume_jobDescription", text);
+    if (title) sessionStorage.setItem("jp_import_title", title);
+    sessionStorage.setItem("jp_toast", "Imported job description from link ✅");
+  } catch (e: any) {
+    alert(String(e?.message || "Could not import from that link."));
+  } finally {
+    setImporting(false);
+  }
+}
 
   // Validate Resume immediately after selection
   async function validateSelectedFile(f: File) {
@@ -139,9 +139,12 @@ export default function LandingPage() {
       fd.append("file", f);
       const res = await fetch("/api/validate-resume", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "We couldn't read any text in that file.");
-      if (!data?.chars || data.chars < 20) {
-        throw new Error("That file appears to have little or no extractable text. Try another Resume or export to PDF.");
+	if (!res.ok) throw new Error(data?.error || "We couldn't read any text in that file.");
+	if (!data?.chars || data.chars < 20) throw new Error("That file appears to have little or no extractable text. Try another Resume or export to PDF.");
+	setValidated(true);
+	// NEW: stash resume text so the bot can use it later
+	if (data?.text) sessionStorage.setItem("jp_resume_text", String(data.text));
+
       }
       setValidated(true);
     } catch (err: any) {
