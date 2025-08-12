@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { Document, Packer, Paragraph, HeadingLevel, TextRun } from "docx";
 
 export const runtime = "nodejs"; // docx needs Node runtime
@@ -18,7 +17,8 @@ function safeFilename(name: string) {
   return (name || "document").toLowerCase().replace(/[^\w.-]+/g, "_") + ".docx";
 }
 function boldRunsFromMarkdown(line: string): TextRun[] {
-  const parts = line.split("**"); // very small "**bold**" support
+  // very small "**bold**" support
+  const parts = line.split("**");
   const runs: TextRun[] = [];
   for (let i = 0; i < parts.length; i++) {
     const text = parts[i];
@@ -67,12 +67,14 @@ export async function POST(req: Request) {
   try {
     payload = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
   }
 
   const title = (payload.title || "Export").trim();
   const sections = Array.isArray(payload.sections) ? payload.sections : [];
-  if (!sections.length) return NextResponse.json({ error: "No sections provided" }, { status: 400 });
+  if (!sections.length) {
+    return new Response(JSON.stringify({ error: "No sections provided" }), { status: 400 });
+  }
 
   const doc = new Document({
     sections: [
@@ -92,17 +94,15 @@ export async function POST(req: Request) {
     ],
   });
 
-  const buffer = await Packer.toBuffer(doc); // Node Buffer
-  // Wrap in Blob to satisfy BodyInit typing (avoids ArrayBuffer | SharedArrayBuffer union issues)
-  const mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const blob = new Blob([buffer], { type: mime });
+  // Node Buffer -> Uint8Array (BodyInit accepts BufferSource, and Uint8Array satisfies TS)
+  const buffer = await Packer.toBuffer(doc);
+  const body = new Uint8Array(buffer);
 
-  return new NextResponse(blob, {
-    status: 200,
-    headers: {
-      "Content-Type": mime,
-      "Content-Disposition": `attachment; filename="${safeFilename(title)}"`,
-      "Cache-Control": "no-store",
-    },
+  const headers = new Headers({
+    "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "Content-Disposition": `attachment; filename="${safeFilename(title)}"`,
+    "Cache-Control": "no-store",
   });
+
+  return new Response(body, { status: 200, headers });
 }
