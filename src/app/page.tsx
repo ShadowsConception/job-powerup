@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Header from "@/components/Header";
 
 function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   return (
@@ -9,31 +10,6 @@ function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
     </svg>
-  );
-}
-
-function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-    </button>
   );
 }
 
@@ -51,33 +27,15 @@ export default function LandingPage() {
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<null | string>(null);
   const [importing, setImporting] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   // Validation
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Menus with hover-delay so you can move into them
-  const [toolsOpen, setToolsOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const toolsTimer = useRef<number | null>(null);
-  const helpTimer = useRef<number | null>(null);
-  const openWithCancel = (which: "tools" | "help") => {
-    const t = which === "tools" ? toolsTimer : helpTimer;
-    if (t.current) window.clearTimeout(t.current);
-    (which === "tools" ? setToolsOpen : setHelpOpen)(true);
-  };
-  const closeWithDelay = (which: "tools" | "help") => {
-    const t = which === "tools" ? toolsTimer : helpTimer;
-    if (t.current) window.clearTimeout(t.current);
-    t.current = window.setTimeout(() => {
-      (which === "tools" ? setToolsOpen : setHelpOpen)(false);
-    }, 180);
-  };
-
   // Footer year + brand
   const currentYear = new Date().getFullYear();
-  const BRAND = "Job PowerUp";
 
   useEffect(() => {
     const jd = sessionStorage.getItem("jp_resume_jobDescription");
@@ -88,9 +46,9 @@ export default function LandingPage() {
 
   // Styles
   const inputBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500";
   const taBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y";
   const btnBase =
     "inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
@@ -138,7 +96,6 @@ export default function LandingPage() {
       if (!data?.chars || data.chars < 20) {
         throw new Error("That file appears to have little or no extractable text. Try another Resume or export to PDF.");
       }
-      // store extracted resume text for the assistant/chat
       if (data?.text) sessionStorage.setItem("jp_resume_text", String(data.text));
       setValidated(true);
     } catch (err: any) {
@@ -149,15 +106,21 @@ export default function LandingPage() {
     }
   }
 
-  // File input
+  // File input + drag/drop
   const hiddenInputRef = useRef<HTMLInputElement | null>(null);
-  function chooseFile() {
-    hiddenInputRef.current?.click();
-  }
+  function chooseFile() { hiddenInputRef.current?.click(); }
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
     setFile(f);
     if (f) validateSelectedFile(f);
+  }
+  function onDragOver(e: React.DragEvent) { e.preventDefault(); setDragActive(true); }
+  function onDragLeave() { setDragActive(false); }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) { setFile(f); validateSelectedFile(f); }
   }
 
   async function handleGenerateAll() {
@@ -180,31 +143,18 @@ export default function LandingPage() {
 
       const analyzePromise = fetch("/api/analyze", { method: "POST", body: fdAnalyze })
         .then((r) => r.json())
-        .then((d) => {
-          setProgress(45);
-          setStatus("Analyzing Resume vs job…");
-          return d;
-        });
+        .then((d) => { setProgress(45); setStatus("Analyzing Resume vs job…"); return d; });
 
       const coverPromise = fetch("/api/cover-letter", { method: "POST", body: fdCover })
         .then((r) => r.json())
-        .then((d) => {
-          setProgress(70);
-          setStatus("Drafting cover letter…");
-          return d;
-        });
+        .then((d) => { setProgress(70); setStatus("Drafting cover letter…"); return d; });
 
       const quizPromise = fetch("/api/interview-quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ jobDescription, count: 10 }),
       })
         .then((r) => r.json())
-        .then((d) => {
-          setProgress(90);
-          setStatus("Building interview questions…");
-          return d;
-        });
+        .then((d) => { setProgress(90); setStatus("Building interview questions…"); return d; });
 
       const [improveData, coverData, quizData] = await Promise.all([analyzePromise, coverPromise, quizPromise]);
 
@@ -235,93 +185,39 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      {/* Header with hover-delay dropdowns */}
-      <header className="border-b border-gray-200 dark:border-gray-800">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
-          <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-            Job PowerUp
-          </a>
-
-          <nav className="hidden md:flex items-center gap-8 text-sm relative">
-            {/* Tools */}
-            <div
-              className="relative"
-              onMouseEnter={() => openWithCancel("tools")}
-              onMouseLeave={() => closeWithDelay("tools")}
-            >
-              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Tools ▾</button>
-              {toolsOpen && (
-                <div
-                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
-                  onMouseEnter={() => openWithCancel("tools")}
-                  onMouseLeave={() => closeWithDelay("tools")}
-                >
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/">
-                    PowerUp My Resume
-                  </a>
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">
-                    Results
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* Help */}
-            <div
-              className="relative"
-              onMouseEnter={() => openWithCancel("help")}
-              onMouseLeave={() => closeWithDelay("help")}
-            >
-              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Help ▾</button>
-              {helpOpen && (
-                <div
-                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
-                  onMouseEnter={() => openWithCancel("help")}
-                  onMouseLeave={() => closeWithDelay("help")}
-                >
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">
-                    Privacy
-                  </a>
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/terms">
-                    Terms
-                  </a>
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/contact">
-                    Contact
-                  </a>
-                </div>
-              )}
-            </div>
-          </nav>
-
-          <div className="flex items-center gap-2">
-            <a href="/login" className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
-              Log in
-            </a>
-            <a href="/signup" className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600">
-              Sign up
-            </a>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      <Header showAuth />
 
       {/* Hero */}
       <main className="flex-1">
         <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
-          <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-            PowerUp My Resume
+          <h1 className="text-4xl font-extrabold tracking-tight">
+            <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600 bg-clip-text text-transparent">
+              PowerUp My Resume
+            </span>
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            Upload a Resume, then add a job description to generate tailored outputs.
+            Upload a resume, then add a job description to generate tailored outputs.
           </p>
         </div>
 
-        {/* Upload card */}
-        <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+        {/* Upload card with drag & drop and color */}
+        <div className="mx-auto max-w-3xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
           <div>
             <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload Your Resume (PDF or DOCX)</h2>
 
-            <div className="rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 p-8 md:p-10 text-center">
+            <div
+              className={[
+                "rounded-2xl border-2 border-dashed p-10 md:p-12 text-center transition-colors",
+                dragActive ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/30" : "border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40",
+              ].join(" ")}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              role="button"
+              aria-label="Upload your resume by clicking or dragging a file here"
+              tabIndex={0}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && hiddenInputRef.current?.click()}
+            >
               <input
                 ref={hiddenInputRef}
                 type="file"
@@ -331,13 +227,15 @@ export default function LandingPage() {
               />
 
               <button
-                onClick={chooseFile}
+                onClick={() => hiddenInputRef.current?.click()}
                 disabled={validating}
-                className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700 disabled:opacity-60"
               >
                 {validating ? <Spinner className="h-5 w-5 mr-2" /> : null}
                 {validating ? "Validating…" : "Choose File"}
               </button>
+
+              <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">or drag & drop here</div>
 
               {file?.name && (
                 <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
@@ -414,7 +312,7 @@ export default function LandingPage() {
                 <button
                   onClick={handleGenerateAll}
                   disabled={!isReadyToGenerate}
-                  className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
+                  className={`${btnBase} w-full text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700`}
                 >
                   {loading && <Spinner />}
                   {loading ? "Generating…" : "Generate"}
@@ -424,7 +322,7 @@ export default function LandingPage() {
                   <div className="w-full">
                     <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
+                        className="h-2 bg-gradient-to-r from-indigo-600 to-fuchsia-600 transition-all duration-300"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
@@ -443,7 +341,7 @@ export default function LandingPage() {
       <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
           <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
-            © {currentYear} {BRAND}. All rights reserved.
+            © {currentYear} Job PowerUp. All rights reserved.
           </div>
           <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
             <a href="/privacy" className="hover:underline">Privacy</a>

@@ -33,7 +33,7 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
   );
 }
 
-/** markdown helpers */
+// text helpers (remove quotes; allow **bold**/*italic*; lists; paragraphs)
 function stripWrappingQuotes(s: string) {
   const t = s.trim();
   if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("“") && t.endsWith("”"))) return t.slice(1, -1).trim();
@@ -44,15 +44,30 @@ function escapeHtml(s: string) {
 }
 function renderBasicMarkdown(md: string) {
   let html = escapeHtml(md);
+  html = html.replace(/^##\s+(.+)$/gm, "<h3 class='mt-4 mb-2 font-semibold'>$1</h3>");
+  html = html.replace(/^#\s+(.+)$/gm, "<h2 class='mt-4 mb-2 font-bold text-lg'>$1</h2>");
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
   html = html.replace(/^(?:-|\*)\s+(.+)$/gm, "<li>$1</li>");
-  html = html.replace(/(<li>.*<\/li>)/gs, "<ul class='list-disc pl-6'>$1</ul>");
+  html = html.replace(/(<li>.*<\/li>)/gs, "<ul class='list-disc pl-6 space-y-1'>$1</ul>");
   html = html.replace(/\n{2,}/g, "</p><p>");
   return `<p>${html}</p>`;
 }
 
-/** —— Chat bubble, cleaner UI, typing dots, takes JD + resumeText —— */
+// Copy helper
+async function copyToClipboard(text: string) {
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+    }
+    return true;
+  } catch { return false; }
+}
+
+/** —— Assistant bubble preserved from previous version (already good) —— */
 function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { resumeText?: string } }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -184,7 +199,6 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { res
 }
 
 export default function ResultsPage() {
-  // state
   const [activeTab, setActiveTab] = useState<"improve" | "cover" | "quiz">("improve");
   const [improvements, setImprovements] = useState("");
   const [coverLetter, setCoverLetter] = useState("");
@@ -192,8 +206,6 @@ export default function ResultsPage() {
   const [quizIdx, setQuizIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const [previewImprove, setPreviewImprove] = useState(true);
-  const [previewCover, setPreviewCover] = useState(true);
 
   const [loadingMoreQuiz, setLoadingMoreQuiz] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -204,7 +216,6 @@ export default function ResultsPage() {
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [showTop, setShowTop] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  const touchStartX = useRef<number | null>(null);
 
   const btnPrimary = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm text-white bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600 hover:from-indigo-700 hover:via-violet-700 hover:to-emerald-700 active:scale-[.99] disabled:opacity-50";
   const btnGhost = "inline-flex items-center justify-center rounded-xl px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]";
@@ -241,8 +252,6 @@ export default function ResultsPage() {
   }, [activeTab]);
 
   const title = useMemo(() => (resumeFilename ? `Results for ${resumeFilename}` : "Your Results"), [resumeFilename]);
-  const taBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-4 text-base leading-relaxed bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y";
 
   async function downloadDocx(title: string, body: string) {
     if (!body?.trim()) return;
@@ -278,32 +287,15 @@ export default function ResultsPage() {
     } catch { setToastMsg("Couldn't refresh questions"); } finally { setLoadingMoreQuiz(false); }
   }
 
-  // flashcards
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (!quiz.length) return;
-      if (e.key === "ArrowRight") nextCard();
-      if (e.key === "ArrowLeft") prevCard();
-      if (e.key.toLowerCase() === "a") setShowAnswer((s) => !s);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [quiz, quizIdx]);
+  // flashcards small helpers
   function nextCard() { if (!quiz.length) return; setDirection(1); setShowAnswer(false); setQuizIdx((i) => (i + 1) % quiz.length); }
   function prevCard() { if (!quiz.length) return; setDirection(-1); setShowAnswer(false); setQuizIdx((i) => (i - 1 + quiz.length) % quiz.length); }
-  function onTouchStart(e: React.TouchEvent) { (touchStartX as any).current = e.changedTouches[0].clientX; }
-  function onTouchEnd(e: React.TouchEvent) {
-    if (touchStartX.current == null) return;
-    const dx = e.changedTouches[0].clientX - (touchStartX.current as number);
-    if (Math.abs(dx) > 40) { dx < 0 ? nextCard() : prevCard(); }
-    touchStartX.current = null;
-  }
 
   // empty state
   if (!improvements && !coverLetter && !quiz.length) {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-        <Header />
+        <Header showAuth={false} />
         <main className="flex-1 grid place-items-center">
           <div className="text-center px-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">No results yet</h1>
@@ -317,7 +309,7 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <Header />
+      <Header showAuth={false} />
 
       {/* Title */}
       <div className="mx-auto max-w-4xl px-6 pt-10 pb-4 text-center">
@@ -360,17 +352,18 @@ export default function ResultsPage() {
           </div>
 
           <div ref={panelRef} className="space-y-6">
-            {/* Improvements */}
+            {/* Improvements (non-editable, formatted) */}
             {activeTab === "improve" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">How to Improve Your Resume</h2>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPreviewImprove((v) => !v)}
+                      onClick={async () => setToastMsg((await copyToClipboard(improvements)) ? "Copied 👍" : "Copy failed")}
                       className={btnGhost}
+                      disabled={!improvements.trim()}
                     >
-                      {previewImprove ? "Edit" : "Preview formatting"}
+                      Copy
                     </button>
                     <button
                       onClick={() => downloadDocx("resume-improvements", improvements)}
@@ -381,32 +374,27 @@ export default function ResultsPage() {
                     </button>
                   </div>
                 </div>
-
-                {!previewImprove ? (
-                  <textarea
-                    className={`${taBase} h-[32rem]`}
-                    value={improvements}
-                    onChange={(e) => setImprovements(e.target.value)}
+                <div className="prose dark:prose-invert max-w-none">
+                  <div
+                    className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 leading-7"
+                    dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(improvements) }}
                   />
-                ) : (
-                  <div className="prose dark:prose-invert max-w-none">
-                    <div
-                      className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950"
-                      dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(improvements) }}
-                    />
-                  </div>
-                )}
+                </div>
               </div>
             )}
 
-            {/* Cover Letter */}
+            {/* Cover Letter (non-editable, formatted) */}
             {activeTab === "cover" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Cover Letter</h2>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setPreviewCover((v) => !v)} className={btnGhost}>
-                      {previewCover ? "Edit" : "Preview formatting"}
+                    <button
+                      onClick={async () => setToastMsg((await copyToClipboard(coverLetter)) ? "Copied 👍" : "Copy failed")}
+                      className={btnGhost}
+                      disabled={!coverLetter.trim()}
+                    >
+                      Copy
                     </button>
                     <button
                       onClick={() => downloadDocx("cover-letter", coverLetter)}
@@ -417,21 +405,12 @@ export default function ResultsPage() {
                     </button>
                   </div>
                 </div>
-
-                {!previewCover ? (
-                  <textarea
-                    className={`${taBase} h-[28rem]`}
-                    value={coverLetter}
-                    onChange={(e) => setCoverLetter(e.target.value)}
+                <div className="prose dark:prose-invert max-w-none">
+                  <div
+                    className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 leading-7"
+                    dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(coverLetter) }}
                   />
-                ) : (
-                  <div className="prose dark:prose-invert max-w-none">
-                    <div
-                      className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 leading-7"
-                      dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(coverLetter) }}
-                    />
-                  </div>
-                )}
+                </div>
               </div>
             )}
 
@@ -439,7 +418,7 @@ export default function ResultsPage() {
             {activeTab === "quiz" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-4">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Interview Practice</h2>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Interview Questions</h2>
                   <button onClick={regenerateQuestions} disabled={loadingMoreQuiz} className={btnPrimary}>
                     {loadingMoreQuiz ? <span className="inline-flex items-center"><Spinner />Generating…</span> : "Generate More"}
                   </button>
@@ -458,22 +437,17 @@ export default function ResultsPage() {
                       </div>
                     </div>
 
-                    <div className="relative" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-                      <div
-                        key={`${quizIdx}-${showAnswer}`}
-                        className={[
-                          "p-5 md:p-6 border border-gray-200 dark:border-gray-800 rounded-2xl bg-gray-50/60 dark:bg-gray-900/60 shadow-sm",
-                          direction === 1 ? "animate-slideInNext" : "animate-slideInPrev",
-                        ].join(" ")}
-                      >
-                        <p className="font-medium text-gray-900 dark:text-gray-100">{quiz[quizIdx].question}</p>
-                        {showAnswer && (
-                          <p className="mt-3 text-gray-800 dark:text-gray-200 leading-relaxed">
-                            <span className="px-2 py-0.5 rounded-lg bg-amber-200 text-amber-900 dark:bg-amber-300 dark:text-amber-900 mr-2 text-xs">Ideal</span>
-                            {quiz[quizIdx].idealAnswer || "—"}
-                          </p>
-                        )}
-                      </div>
+                    <div
+                      key={`${quizIdx}-${showAnswer}`}
+                      className="p-5 md:p-6 border border-gray-200 dark:border-gray-800 rounded-2xl bg-white dark:bg-gray-950 shadow-sm"
+                    >
+                      <p className="font-medium text-gray-900 dark:text-gray-100">{quiz[quizIdx].question}</p>
+                      {showAnswer && (
+                        <p className="mt-3 text-gray-800 dark:text-gray-200 leading-relaxed">
+                          <span className="px-2 py-0.5 rounded-lg bg-amber-200 text-amber-900 dark:bg-amber-300 dark:text-amber-900 mr-2 text-xs">Ideal</span>
+                          {quiz[quizIdx].idealAnswer || "—"}
+                        </p>
+                      )}
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-3">
@@ -485,13 +459,6 @@ export default function ResultsPage() {
                     </div>
 
                     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Tip: use ← / → to switch, press “A” to toggle answer.</p>
-
-                    <style jsx>{`
-                      @keyframes slideInNext { from { opacity: 0; transform: translateX(18px) scale(0.98); } to { opacity: 1; transform: translateX(0) scale(1); } }
-                      @keyframes slideInPrev { from { opacity: 0; transform: translateX(-18px) scale(0.98); } to { opacity: 1; transform: translateX(0) scale(1); } }
-                      .animate-slideInNext { animation: slideInNext 220ms ease-out; }
-                      .animate-slideInPrev { animation: slideInPrev 220ms ease-out; }
-                    `}</style>
                   </>
                 )}
               </div>
@@ -520,7 +487,7 @@ export default function ResultsPage() {
           coverLetter,
           jobDescription: (JSON.parse(sessionStorage.getItem("jp_results") || "{}")?.jobDescription) || "",
           resumeFilename,
-          resumeText, // from validate/analyze (see change below)
+          resumeText,
         }}
       />
 

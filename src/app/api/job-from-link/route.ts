@@ -1,76 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as cheerio from "cheerio";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const runtime = "nodejs";
 
-async function fetchPage(url: string) {
-  const res = await fetch(url, { headers: { "User-Agent": "JobPowerUpBot/1.0" }, cache: "no-store" });
-  if (!res.ok) throw new Error(`Failed to fetch (${res.status})`);
-  const html = await res.text();
-  return html;
-}
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-function extractText(html: string) {
-  const $ = cheerio.load(html);
-  $("script, style, noscript").remove();
-
-  const target =
-    $("main:contains(job), main")?.first().text() ||
-    $("article:contains(job), article")?.first().text() ||
-    $("[role=main]")?.first().text() ||
-    $(".job, .job-description, .description, .posting, .content").first().text() ||
-    $("body").text();
-
-  const clean = target.replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
-  const title =
-    $('meta[property="og:title"]').attr("content") ||
-    $("title").text().trim() ||
-    $('meta[name="title"]').attr("content") ||
-    "";
-
-  return { text: clean, title };
-}
-
-async function expandWithAI(raw: string, pageTitle: string | undefined) {
-  if (process.env.FORCE_MOCK_AI === "1") return raw;
-
-  const sys = `You are Job PowerUp. Rewrite messy job postings into a clean, concise, *job-relevant* description.
-- Keep all requirements/responsibilities, skills, years of experience, education, location, compensation, and tech stack.
-- Remove irrelevant fluff: company marketing blurbs, DEI statements, application instructions, cookie banners, unrelated disclaimers.
-- De-duplicate and merge similar bullets. Normalize formatting.
-- Output in markdown with headings and bullets. Use **bold** for key skills/requirements.`;
-
-  const usr = `Original page title: ${pageTitle || "N/A"}
-Raw extracted text (may include noise):
-
-"""${raw}"""
-
-Summarize into a *concise but complete* job description that preserves job-relevant details only. Avoid repetition.`;
-
-  const completion = await openai.chat.completions.create({
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    messages: [{ role: "system", content: sys }, { role: "user", content: usr }],
-    temperature: 0.3,
-  });
-
-  const out = completion.choices?.[0]?.message?.content?.trim() || raw;
-  return out;
+async function fetchText(url: string) {
+  const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 JobPowerUp" } });
+  const html = await r.text();
+  // light-weight extraction to avoid bringing cheerio
+  const cleaned = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const titleMatch = html.match(/<title>(.*?)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].trim() : undefined;
+  return { text: cleaned, title };
 }
 
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json();
-    if (!url) return NextResponse.json({ error: "Missing url" }, { status: 400 });
+    if (!url || typeof url !== "string") return NextResponse.json({ error: "Missing url" }, { status: 400 });
 
-    const html = await fetchPage(url);
-    const { text, title } = extractText(html);
-    if (!text || text.length < 200) throw new Error("No readable content found at that link.");
+    const { text, title } = await fetchText(url);
 
-    // Summarize + clean
-    const finalText = await expandWithAI(text, title);
+    // Summarize to a high-signal JD: keep responsibilities, must-haves, nice-to-haves, location, level, tech, comp if present.
+    const prompt = [
+      "You will receive raw scraped text from a job posting page. It may include navigation noise.",
+      "Extract ONLY job-relevant content and produce a detailed, de-duplicated job description.",
+      "Prefer specificity over brevity (700–1200 words if present). Keep headings and lists.",
+      "Sections to include when available: Role Summary, Responsibilities, Required Qualifications, Preferred Qualifications, Tech/Tools, Location & Work Style, Compensation/Benefits, Application Notes.",
+      "Remove company boilerplate, cookie notices, and repeated lines.",
+      "Use **bold** and *italic* markdown where helpful.",
+      "",
+      `RAW:\n${text.slice(0, 120_000)}`, // safety cap
+    ].join("\n");
 
-    return NextResponse.json({ text: finalText, title: title || undefined });
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1400,
+    });
+
+    const jd = resp.choices?.[0]?.message?.content?.trim() || "";
+    return NextResponse.json({ text: jd, title });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Import failed" }, { status: 500 });
   }
