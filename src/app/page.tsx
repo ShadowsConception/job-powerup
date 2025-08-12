@@ -50,17 +50,12 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<null | string>(null);
+  const [importing, setImporting] = useState(false);
 
   // Validation
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
-
-  // Upload zone highlight (for drag & drop)
-  const [dragActive, setDragActive] = useState(false);
-
-  // “Import from link” spinner
-  const [importing, setImporting] = useState(false);
 
   // Menus with hover-delay so you can move into them
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -93,41 +88,41 @@ export default function LandingPage() {
 
   // Styles
   const inputBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
   const taBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y";
   const btnBase =
     "inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
-  // Import job link (with spinner)
- async function importFromLink() {
-  if (!jobUrl.trim()) {
-    alert("Paste a job posting link first.");
-    return;
+  // Import job link
+  async function importFromLink() {
+    if (!jobUrl.trim()) {
+      alert("Paste a job posting link first.");
+      return;
+    }
+    try {
+      setImporting(true);
+      const res = await fetch("/api/job-from-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: jobUrl.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || `Import failed (${res.status}).`);
+      const text: string = data?.text || "";
+      const title: string | undefined = data?.title;
+      if (!text) throw new Error("No readable content found at that link.");
+      setJobDescription(text);
+      setImportTitle(title || null);
+      sessionStorage.setItem("jp_resume_jobDescription", text);
+      if (title) sessionStorage.setItem("jp_import_title", title);
+      sessionStorage.setItem("jp_toast", "Imported job description from link ✅");
+    } catch (e: any) {
+      alert(String(e?.message || "Could not import from that link."));
+    } finally {
+      setImporting(false);
+    }
   }
-  try {
-    setImporting(true);
-    const res = await fetch("/api/job-from-link", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: jobUrl.trim(), detail: "max" }), // ← ask for maximum detail
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.error || `Import failed (${res.status}).`);
-    const text: string = data?.text || "";
-    const title: string | undefined = data?.title;
-    if (!text) throw new Error("No readable content found at that link.");
-    setJobDescription(text);
-    setImportTitle(title || null);
-    sessionStorage.setItem("jp_resume_jobDescription", text);
-    if (title) sessionStorage.setItem("jp_import_title", title);
-    sessionStorage.setItem("jp_toast", "Imported job description from link ✅");
-  } catch (e: any) {
-    alert(String(e?.message || "Could not import from that link."));
-  } finally {
-    setImporting(false);
-  }
-}
 
   // Validate Resume immediately after selection
   async function validateSelectedFile(f: File) {
@@ -139,13 +134,12 @@ export default function LandingPage() {
       fd.append("file", f);
       const res = await fetch("/api/validate-resume", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
-	if (!res.ok) throw new Error(data?.error || "We couldn't read any text in that file.");
-	if (!data?.chars || data.chars < 20) throw new Error("That file appears to have little or no extractable text. Try another Resume or export to PDF.");
-	setValidated(true);
-	// NEW: stash resume text so the bot can use it later
-	if (data?.text) sessionStorage.setItem("jp_resume_text", String(data.text));
-
+      if (!res.ok) throw new Error(data?.error || "We couldn't read any text in that file.");
+      if (!data?.chars || data.chars < 20) {
+        throw new Error("That file appears to have little or no extractable text. Try another Resume or export to PDF.");
       }
+      // store extracted resume text for the assistant/chat
+      if (data?.text) sessionStorage.setItem("jp_resume_text", String(data.text));
       setValidated(true);
     } catch (err: any) {
       setValidationError(String(err?.message || "Validation failed."));
@@ -164,25 +158,6 @@ export default function LandingPage() {
     const f = e.target.files?.[0] || null;
     setFile(f);
     if (f) validateSelectedFile(f);
-  }
-
-  // Drag & drop handlers
-  function onDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    setDragActive(true);
-  }
-  function onDragLeave(e: React.DragEvent) {
-    e.preventDefault();
-    setDragActive(false);
-  }
-  function onDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragActive(false);
-    const f = e.dataTransfer.files?.[0];
-    if (f) {
-      setFile(f);
-      validateSelectedFile(f);
-    }
   }
 
   async function handleGenerateAll() {
@@ -274,12 +249,10 @@ export default function LandingPage() {
               onMouseEnter={() => openWithCancel("tools")}
               onMouseLeave={() => closeWithDelay("tools")}
             >
-              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80" aria-haspopup="menu" aria-expanded={toolsOpen}>
-                Tools ▾
-              </button>
+              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Tools ▾</button>
               {toolsOpen && (
                 <div
-                  className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
                   onMouseEnter={() => openWithCancel("tools")}
                   onMouseLeave={() => closeWithDelay("tools")}
                 >
@@ -299,12 +272,10 @@ export default function LandingPage() {
               onMouseEnter={() => openWithCancel("help")}
               onMouseLeave={() => closeWithDelay("help")}
             >
-              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80" aria-haspopup="menu" aria-expanded={helpOpen}>
-                Help ▾
-              </button>
+              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Help ▾</button>
               {helpOpen && (
                 <div
-                  className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
                   onMouseEnter={() => openWithCancel("help")}
                   onMouseLeave={() => closeWithDelay("help")}
                 >
@@ -323,16 +294,10 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <a
-              href="/login"
-              className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
-            >
+            <a href="/login" className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
               Log in
             </a>
-            <a
-              href="/signup"
-              className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
-            >
+            <a href="/signup" className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600">
               Sign up
             </a>
             <ThemeToggle />
@@ -351,25 +316,12 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Upload card with larger dashed area + drag & drop */}
-        <div className="mx-auto max-w-3xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+        {/* Upload card */}
+        <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
           <div>
             <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload Your Resume (PDF or DOCX)</h2>
 
-            <div
-              className={[
-                "rounded-2xl border-2 border-dashed",
-                dragActive ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30" : "border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40",
-                "p-10 md:p-12 text-center transition-colors",
-              ].join(" ")}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onDrop={onDrop}
-              role="button"
-              aria-label="Upload your resume by clicking or dragging a file here"
-              tabIndex={0}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && hiddenInputRef.current?.click()}
-            >
+            <div className="rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 p-8 md:p-10 text-center">
               <input
                 ref={hiddenInputRef}
                 type="file"
@@ -379,17 +331,13 @@ export default function LandingPage() {
               />
 
               <button
-                onClick={() => hiddenInputRef.current?.click()}
+                onClick={chooseFile}
                 disabled={validating}
-                className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700 disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
               >
                 {validating ? <Spinner className="h-5 w-5 mr-2" /> : null}
                 {validating ? "Validating…" : "Choose File"}
               </button>
-
-              <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-                or drag & drop here
-              </div>
 
               {file?.name && (
                 <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
@@ -452,7 +400,7 @@ export default function LandingPage() {
                   <span className="text-xs text-gray-500 dark:text-gray-400">Paste only if no link.</span>
                 </div>
                 <textarea
-                  className={`${taBase} h-80`}
+                  className={`${taBase} h-72`}
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
                   placeholder="Paste the full job posting here… (or import from a link above)"
@@ -466,7 +414,7 @@ export default function LandingPage() {
                 <button
                   onClick={handleGenerateAll}
                   disabled={!isReadyToGenerate}
-                  className={`${btnBase} w-full text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700`}
+                  className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
                 >
                   {loading && <Spinner />}
                   {loading ? "Generating…" : "Generate"}
@@ -476,7 +424,7 @@ export default function LandingPage() {
                   <div className="w-full">
                     <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-2 bg-gradient-to-r from-indigo-600 to-fuchsia-600 transition-all duration-300"
+                        className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
                         style={{ width: `${progress}%` }}
                       />
                     </div>
