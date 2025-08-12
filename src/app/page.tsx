@@ -38,7 +38,7 @@ function ThemeToggle() {
   );
 }
 
-// ===== NEW: paste cleaning helpers =====
+// ===== Paste cleaning helpers =====
 const BOTWALL_PATTERNS = /(just a moment|cloudflare|additional verification required|ray id|captcha)/i;
 
 function parseBookmarkletPayload(raw: string) {
@@ -70,7 +70,7 @@ function parseBookmarkletPayload(raw: string) {
   const title = (mTitle?.[1] || "").trim();
   return { title, text: body, blocked: false };
 }
-// ======================================
+// ==================================
 
 export default function LandingPage() {
   const router = useRouter();
@@ -88,7 +88,7 @@ export default function LandingPage() {
 
   // Footer year + brand
   const currentYear = new Date().getFullYear();
-  const BRAND = "Job PowerUp"; // change if you want a company name here
+  const BRAND = "Job PowerUp";
 
   useEffect(() => {
     const jd = sessionStorage.getItem("jp_resume_jobDescription");
@@ -161,7 +161,7 @@ export default function LandingPage() {
     }
   }
 
-  // ===== NEW: on-paste cleaner =====
+  // on-paste cleaner
   function handlePasteClean(e: React.ClipboardEvent<HTMLTextAreaElement>) {
     const raw = e.clipboardData.getData("text/plain");
     if (!raw) return;
@@ -183,17 +183,37 @@ export default function LandingPage() {
       sessionStorage.setItem("jp_toast", "Cleaned pasted job description ✅");
     }
   }
-  // =================================
+
+  // ===== NEW: Validate resume first =====
+  async function validateResumeOrFail(): Promise<void> {
+    if (!file) throw new Error("Upload a Resume first.");
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/validate-resume", { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || "We couldn't read any text in that file. Please try another Resume.");
+    }
+    if (!data?.chars || data.chars < 20) {
+      throw new Error("That file appears to have little or no extractable text. Try a different Resume or export to PDF.");
+    }
+  }
+  // =====================================
 
   async function handleGenerateAll() {
-    if (!file) return alert("Upload a PDF or DOCX résumé first.");
+    if (!file) return alert("Upload a PDF or DOCX Resume first.");
     if (!jobDescription.trim()) return alert("Paste the job description (or import from link) first.");
 
     setLoading(true);
-    setStatus("Starting…");
+    setStatus("Checking your Resume…");
     startProgress();
 
     try {
+      // Validate resume text first (new)
+      await validateResumeOrFail();
+      bumpProgress(20);
+      setStatus("Starting…");
+
       const fdAnalyze = new FormData();
       fdAnalyze.append("file", file);
       fdAnalyze.append("jobDescription", jobDescription);
@@ -205,15 +225,15 @@ export default function LandingPage() {
       const analyzePromise = fetch("/api/analyze", { method: "POST", body: fdAnalyze })
         .then((r) => r.json())
         .then((d) => {
-          bumpProgress(35);
-          setStatus("Analyzing résumé vs job…");
+          bumpProgress(45);
+          setStatus("Analyzing Resume vs job…");
           return d;
         });
 
       const coverPromise = fetch("/api/cover-letter", { method: "POST", body: fdCover })
         .then((r) => r.json())
         .then((d) => {
-          bumpProgress(65);
+          bumpProgress(70);
           setStatus("Drafting cover letter…");
           return d;
         });
@@ -250,12 +270,12 @@ export default function LandingPage() {
       stopProgress();
 
       router.push("/results");
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       stopProgress();
       setProgress(0);
       setStatus(null);
-      alert("Something went wrong generating results.");
+      alert(String(e?.message || "Something went wrong generating results."));
     } finally {
       setLoading(false);
     }
@@ -265,104 +285,140 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <main className="flex-1">
-        <div className="mx-auto max-w-4xl px-6 py-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="text-left">
-              <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Job PowerUp</h1>
-              <p className="mt-1 text-gray-600 dark:text-gray-400">
-                Upload your résumé, paste a job description, or import from a link — then generate tailored outputs.
-              </p>
-            </div>
+      {/* ===== Header with dropdowns + auth ===== */}
+      <header className="border-b border-gray-200 dark:border-gray-800">
+        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
+          <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+            Job PowerUp
+          </a>
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            <details className="relative group">
+              <summary className="list-none cursor-pointer text-gray-700 dark:text-gray-300 hover:opacity-80">
+                Tools ▾
+              </summary>
+              <div className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2">
+                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/">Resume Converter</a>
+                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">Results</a>
+              </div>
+            </details>
+            <details className="relative group">
+              <summary className="list-none cursor-pointer text-gray-700 dark:text-gray-300 hover:opacity-80">
+                Help ▾
+              </summary>
+              <div className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2">
+                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/import-helper">Import Helper</a>
+                <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">Privacy</a>
+              </div>
+            </details>
+          </nav>
+          <div className="flex items-center gap-2">
+            <a href="/login" className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+              Log in
+            </a>
+            <a href="/signup" className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600">
+              Sign up
+            </a>
             <ThemeToggle />
           </div>
+        </div>
+      </header>
 
-          {/* Centered card */}
-          <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
-            {/* Upload */}
-            <div>
-              <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Upload Your Résumé (PDF or DOCX)</h2>
+      {/* ===== Hero ===== */}
+      <main className="flex-1">
+        <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
+          <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+            Resume Converter
+          </h1>
+          <p className="mt-2 text-gray-600 dark:text-gray-400">
+            Upload a Resume, paste a job description, or import from a link — then generate tailored outputs.
+          </p>
+        </div>
+
+        {/* Centered card */}
+        <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+          {/* Upload */}
+          <div>
+            <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Upload Your Resume (PDF or DOCX)</h2>
+            <input
+              type="file"
+              accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className={inputBase}
+            />
+            {file?.name && <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {file.name}</div>}
+          </div>
+
+          {/* Import from link */}
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
-                type="file"
-                accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-                className={inputBase}
+                className={`${inputBase} flex-1`}
+                placeholder="https://careers.company.com/job/12345"
+                value={jobUrl}
+                onChange={(e) => setJobUrl(e.target.value)}
+                type="url"
+                inputMode="url"
               />
-              {file?.name && <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">Selected: {file.name}</div>}
-            </div>
-
-            {/* Import from link */}
-            <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  className={`${inputBase} flex-1`}
-                  placeholder="https://careers.company.com/job/12345"
-                  value={jobUrl}
-                  onChange={(e) => setJobUrl(e.target.value)}
-                  type="url"
-                  inputMode="url"
-                />
-                <button
-                  onClick={importFromLink}
-                  disabled={importing || !jobUrl.trim()}
-                  className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50"
-                >
-                  {importing && <Spinner />}
-                  {importing ? "Importing…" : "Import from link"}
-                </button>
-              </div>
-              {importTitle && (
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  <span className="font-semibold">Imported title:</span> {importTitle}
-                </p>
-              )}
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                If a site blocks import, use the <a href="/import-helper" className="underline">bookmarklet</a> and paste here.
-              </p>
-            </div>
-
-            {/* JD textarea */}
-            <div>
-              <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
-              <textarea
-                className={`${taBase} h-72`}
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                onPaste={handlePasteClean}   // <-- NEW
-                placeholder="Paste the full job posting here… (or import from a link above)"
-              />
-              <div className="text-right text-xs text-gray-500 dark:text-gray-400">
-                {jobDescription.length.toLocaleString()} characters
-              </div>
-            </div>
-
-            {/* Generate + Progress */}
-            <div className="space-y-3">
               <button
-                onClick={handleGenerateAll}
-                disabled={!isReadyToGenerate}
-                className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
-                title={!file ? "Upload a résumé to enable" : !jobDescription.trim() ? "Paste a job description to enable" : "Generate results"}
+                onClick={importFromLink}
+                disabled={importing || !jobUrl.trim()}
+                className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50"
               >
-                {loading && <Spinner />}
-                {loading ? "Generating…" : "Generate"}
+                {importing && <Spinner />}
+                {importing ? "Importing…" : "Import from link"}
               </button>
-
-              {loading && (
-                <div className="w-full">
-                  <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
-                    <div
-                      className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 text-center">
-                    {status ? `${status} (${Math.min(progress, 100)}%)` : `${Math.min(progress, 100)}%`}
-                  </div>
-                </div>
-              )}
             </div>
+            {importTitle && (
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                <span className="font-semibold">Imported title:</span> {importTitle}
+              </p>
+            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              If a site blocks import, use the <a href="/import-helper" className="underline">bookmarklet</a> and paste here.
+            </p>
+          </div>
+
+          {/* JD textarea */}
+          <div>
+            <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
+            <textarea
+              className={`${taBase} h-72`}
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              onPaste={handlePasteClean}
+              placeholder="Paste the full job posting here… (or import from a link above)"
+            />
+            <div className="text-right text-xs text-gray-500 dark:text-gray-400">
+              {jobDescription.length.toLocaleString()} characters
+            </div>
+          </div>
+
+          {/* Generate + Progress */}
+          <div className="space-y-3">
+            <button
+              onClick={handleGenerateAll}
+              disabled={!isReadyToGenerate}
+              className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
+              title={!file ? "Upload a Resume to enable" : !jobDescription.trim() ? "Paste a job description to enable" : "Generate results"}
+            >
+              {loading && <Spinner />}
+              {loading ? "Generating…" : "Generate"}
+            </button>
+
+            {loading && (
+              <div className="w-full">
+                <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <div className="mt-1 text-xs text-gray-600 dark:text-gray-400 text-center">
+                  {status ? `${status} (${Math.min(progress, 100)}%)` : `${Math.min(progress, 100)}%`}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -370,7 +426,7 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6">
+      <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
           <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
             © {currentYear} {BRAND}. All rights reserved.
@@ -378,7 +434,7 @@ export default function LandingPage() {
           <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
             <a href="/privacy" className="hover:underline">Privacy</a>
             <a href="/terms" className="hover:underline">Terms</a>
-            <a href="mailto:hello@example.com" className="hover:underline">Contact</a>
+            <a href="/contact" className="hover:underline">Contact</a>
           </nav>
         </div>
       </footer>
