@@ -1,12 +1,20 @@
-declare module "pdf-parse" {
-  export interface PdfParseResult {
-    text: string;
-    // add more fields if you use them:
-    // numpages?: number;
-    // info?: Record<string, unknown>;
-    // metadata?: unknown;
-  }
+// Minimal shims so TS is happy with dynamic imports of pdf-parse
 
-  const pdfParse: (data: ArrayBuffer | Uint8Array | Buffer) => Promise<PdfParseResult>;
+declare module "pdf-parse" {
+  export type PdfParseResult = {
+    text: string;
+    numpages?: number;
+    info?: any;
+    metadata?: any;
+    version?: string;
+  };
+  const pdfParse: (data: Buffer | Uint8Array | ArrayBuffer) => Promise<PdfParseResult>;
+  export = pdfParse;
+  export default pdfParse;
+}
+
+declare module "pdf-parse/lib/pdf-parse.js" {
+  import pdfParse from "pdf-parse";
+  export = pdfParse;
   export default pdfParse;
 }
