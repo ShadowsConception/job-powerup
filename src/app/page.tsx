@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import FloatThemeToggle from "@/components/FloatThemeToggle";
 
+// src/app/page.tsx
+export const dynamic = "force-dynamic";
+
 function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden>
