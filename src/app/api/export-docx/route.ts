@@ -1,153 +1,150 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import {
-  AlignmentType,
   Document,
-  HeadingLevel,
   Packer,
   Paragraph,
+  HeadingLevel,
   TextRun,
 } from "docx";
 
-/** Minimal markdown → docx runs (bold, italic, bullets, numbered) */
-function mdLineToRuns(line: string): TextRun[] {
+export const runtime = "nodejs"; // docx requires Node, not Edge
+
+type Section = { heading?: string; body: string };
+type Payload = { title?: string; sections: Section[] };
+
+// --- helpers ---
+function normalize(s: string) {
+  return s.replace(/\r\n/g, "\n").replace(/\u00A0/g, " ").trim();
+}
+function stripOuterQuotes(s: string) {
+  const q = (s.startsWith('"') && s.endsWith('"')) || (s.startsWith("“") && s.endsWith("”"));
+  return q ? s.slice(1, -1).trim() : s;
+}
+function safeFilename(name: string) {
+  return (name || "document").toLowerCase().replace(/[^\w.-]+/g, "_") + ".docx";
+}
+function boldRunsFromMarkdown(line: string): TextRun[] {
+  // very small "**bold**" parser
+  const parts = line.split("**");
   const runs: TextRun[] = [];
-  const tokens = [];
-  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|[^*`]+)/g;
-  const parts = line.match(regex) || [line];
-  for (const part of parts) {
-    if (part.startsWith("**") && part.endsWith("**")) tokens.push({ text: part.slice(2, -2), bold: true });
-    else if (part.startsWith("*") && part.endsWith("*")) tokens.push({ text: part.slice(1, -1), italics: true });
-    else if (part.startsWith("`") && part.endsWith("`")) tokens.push({ text: part.slice(1, -1) });
-    else tokens.push({ text: part });
+  for (let i = 0; i < parts.length; i++) {
+    const text = parts[i];
+    if (!text) continue;
+    const isBold = i % 2 === 1;
+    runs.push(new TextRun({ text, bold: isBold }));
   }
-  for (const t of tokens) runs.push(new TextRun({ text: t.text, bold: (t as any).bold, italics: (t as any).italics }));
-  return runs;
+  return runs.length ? runs : [new TextRun(line)];
+}
+function blockToParagraphs(block: string): Paragraph[] {
+  const trimmed = block.trim();
+  if (!trimmed) return [];
+
+  // bullet list if each non-empty line starts with a bullet marker
+  const lines = trimmed.split("\n").filter(Boolean);
+  const isBulleted = lines.every((l) => /^(\-|\*|•)\s+/.test(l));
+
+  if (isBulleted) {
+    return lines.map((l) => {
+      const text = l.replace(/^(\-|\*|•)\s+/, "");
+      return new Paragraph({
+        children: boldRunsFromMarkdown(text),
+        bullet: { level: 0 },
+      });
+    });
+  }
+
+  // headings
+  if (/^##\s+/.test(trimmed)) {
+    return [
+      new Paragraph({
+        text: trimmed.replace(/^##\s+/, ""),
+        heading: HeadingLevel.HEADING_2,
+      }),
+    ];
+  }
+  if (/^#\s+/.test(trimmed)) {
+    return [
+      new Paragraph({
+        text: trimmed.replace(/^#\s+/, ""),
+        heading: HeadingLevel.HEADING_1,
+      }),
+    ];
+  }
+
+  // normal paragraph (collapse single newlines into spaces)
+  const singleLine = lines.join(" ");
+  return [new Paragraph({ children: boldRunsFromMarkdown(singleLine) })];
 }
 
-function mdToParagraphs(md: string): Paragraph[] {
-  const lines = md.replace(/\r\n/g, "\n").split("\n");
+function markdownToParagraphs(md: string): Paragraph[] {
+  const cleaned = normalize(stripOuterQuotes(md));
+  const blocks = cleaned.split(/\n{2,}/);
   const paras: Paragraph[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i];
-    const line = raw.trimEnd();
-
-    if (!line) { paras.push(new Paragraph("")); continue; }
-
-    // Headings
-    const h = /^(#{1,3})\s+(.*)$/.exec(line);
-    if (h) {
-      const level = h[1].length;
-      const text = h[2];
-      const heading =
-        level === 1 ? HeadingLevel.HEADING_1 :
-        level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3;
-      paras.push(new Paragraph({ heading, children: mdLineToRuns(text) }));
-      continue;
-    }
-
-    // Bullets
-    if (/^[-*]\s+/.test(line)) {
-      paras.push(new Paragraph({ bullet: { level: 0 }, children: mdLineToRuns(line.replace(/^[-*]\s+/, "")) }));
-      continue;
-    }
-
-    // Numbered list like "1. thing"
-    if (/^\d+\.\s+/.test(line)) {
-      paras.push(new Paragraph({ numbering: { reference: "numbered-list", level: 0 }, children: mdLineToRuns(line.replace(/^\d+\.\s+/, "")) }));
-      continue;
-    }
-
-    // Normal paragraph
-    paras.push(new Paragraph({ children: mdLineToRuns(line) }));
-  }
+  for (const b of blocks) paras.push(...blockToParagraphs(b));
   return paras;
 }
 
-export async function POST(req: NextRequest) {
+// --- Route handler ---
+export async function POST(req: Request) {
+  let payload: Payload;
   try {
-    const body = await req.json();
-
-    const title: string = body.title || "Job PowerUp";
-    const sections: Array<{ heading: string; body: string }> =
-      body.sections ||
-      [
-        { heading: "Resume Improvements", body: body.improvements || "" },
-        { heading: "Cover Letter", body: body.coverLetter || "" },
-      ];
-
-    const doc = new Document({
-      styles: {
-        default: {
-          document: {
-            run: { font: "Times New Roman", size: 22 }, // 11pt
-            paragraph: { spacing: { line: 276, before: 120, after: 120 } }, // 1.15, +space
-          },
-        },
-        paragraphStyles: [
-          {
-            id: "Heading1",
-            name: "Heading 1",
-            basedOn: "Normal",
-            next: "Normal",
-            quickFormat: true,
-            run: { bold: true, size: 30 },
-            paragraph: { spacing: { before: 240, after: 120 } },
-          },
-          {
-            id: "Heading2",
-            name: "Heading 2",
-            basedOn: "Normal",
-            next: "Normal",
-            quickFormat: true,
-            run: { bold: true, size: 28 },
-            paragraph: { spacing: { before: 180, after: 90 } },
-          },
-        ],
-      },
-      numbering: {
-        config: [
-          {
-            reference: "numbered-list",
-            levels: [
-              {
-                level: 0,
-                format: "decimal",
-                text: "%1.",
-                alignment: AlignmentType.START,
-              },
-            ],
-          },
-        ],
-      },
-      sections: [
-        {
-          properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } }, // 1" margins
-          children: [
-            new Paragraph({
-              text: title,
-              heading: HeadingLevel.TITLE,
-              alignment: AlignmentType.CENTER,
-            }),
-            new Paragraph(""),
-            ...sections.flatMap((s) => [
-              new Paragraph({ text: s.heading, heading: HeadingLevel.HEADING_1 }),
-              ...mdToParagraphs(String(s.body || "")),
-              new Paragraph(""),
-            ]),
-          ],
-        },
-      ],
-    });
-
-    const buffer = await Packer.toBuffer(doc);
-    return new NextResponse(buffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="${title.replace(/[^\w.-]+/g, "_").toLowerCase()}.docx"`,
-      },
-    });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Export failed" }, { status: 500 });
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
+
+  const title = (payload.title || "Export").trim();
+  const sections = Array.isArray(payload.sections) ? payload.sections : [];
+
+  if (!sections.length) {
+    return NextResponse.json({ error: "No sections provided" }, { status: 400 });
+  }
+
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          // optional document title
+          new Paragraph({
+            text: title,
+            heading: HeadingLevel.TITLE,
+          }),
+          ...sections.flatMap((s) => {
+            const kids: Paragraph[] = [];
+            const heading = (s.heading || "").trim();
+            const body = (s.body || "").trim();
+
+            if (heading) {
+              kids.push(
+                new Paragraph({
+                  text: heading,
+                  heading: HeadingLevel.HEADING_2,
+                })
+              );
+            }
+            if (body) {
+              kids.push(...markdownToParagraphs(body));
+            }
+            // add a bit of space after each section
+            kids.push(new Paragraph({ text: "" }));
+            return kids;
+          }),
+        ],
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc); // Node Buffer
+  // Convert Buffer -> ArrayBuffer to appease Web Response typing
+  const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+  return new NextResponse(arrayBuffer, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Disposition": `attachment; filename="${safeFilename(title)}"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
