@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode in Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ==== Theme (trustworthy + helpful: indigo + teal) ==== */
+:root {
+  --bg: #0b1220;        /* deep slate/blue */
+  --card: #0f172a;      /* slate-900 */
+  --muted: #94a3b8;     /* slate-400 */
+  --text: #e5e7eb;      /* zinc-200 */
+  --primary: #4f46e5;   /* indigo-600 = trust */
+  --accent: #14b8a6;    /* teal-500   = helpful */
+  --ring: #6366f1;      /* indigo-500 */
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ==== Simple UI helpers ==== */
+a {
+  color: var(--accent);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.9rem;
+}
+
+.btn:hover {
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--ring) 30%, transparent);
+}
+
+.btn-primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: white;
+}
+
+.btn-ghost {
+  background: transparent;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #233047;
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.small {
+  color: var(--muted);
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.badge {
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  border: 1px solid var(--accent);
+  color: #a7ffef;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.75rem;
+}
