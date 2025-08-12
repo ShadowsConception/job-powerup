@@ -1,11 +1,10 @@
 import { Document, Packer, Paragraph, HeadingLevel, TextRun } from "docx";
 
-export const runtime = "nodejs"; // docx needs Node runtime
+export const runtime = "nodejs";
 
 type Section = { heading?: string; body: string };
 type Payload = { title?: string; sections: Section[] };
 
-// ---------- helpers ----------
 function normalize(s: string) {
   return s.replace(/\r\n/g, "\n").replace(/\u00A0/g, " ").trim();
 }
@@ -17,7 +16,6 @@ function safeFilename(name: string) {
   return (name || "document").toLowerCase().replace(/[^\w.-]+/g, "_") + ".docx";
 }
 function boldRunsFromMarkdown(line: string): TextRun[] {
-  // very small "**bold**" support
   const parts = line.split("**");
   const runs: TextRun[] = [];
   for (let i = 0; i < parts.length; i++) {
@@ -31,25 +29,20 @@ function boldRunsFromMarkdown(line: string): TextRun[] {
 function blockToParagraphs(block: string): Paragraph[] {
   const trimmed = block.trim();
   if (!trimmed) return [];
-
   const lines = trimmed.split("\n").filter(Boolean);
   const isBulleted = lines.every((l) => /^(\-|\*|•)\s+/.test(l));
-
   if (isBulleted) {
     return lines.map((l) => {
       const text = l.replace(/^(\-|\*|•)\s+/, "");
       return new Paragraph({ children: boldRunsFromMarkdown(text), bullet: { level: 0 } });
     });
   }
-
   if (/^##\s+/.test(trimmed)) {
     return [new Paragraph({ text: trimmed.replace(/^##\s+/, ""), heading: HeadingLevel.HEADING_2 })];
   }
   if (/^#\s+/.test(trimmed)) {
     return [new Paragraph({ text: trimmed.replace(/^#\s+/, ""), heading: HeadingLevel.HEADING_1 })];
   }
-
-  // normal paragraph: collapse single newlines
   const singleLine = lines.join(" ");
   return [new Paragraph({ children: boldRunsFromMarkdown(singleLine) })];
 }
@@ -61,7 +54,6 @@ function markdownToParagraphs(md: string): Paragraph[] {
   return paras;
 }
 
-// ---------- route ----------
 export async function POST(req: Request) {
   let payload: Payload;
   try {
@@ -86,7 +78,7 @@ export async function POST(req: Request) {
             const kids: Paragraph[] = [];
             if (s.heading?.trim()) kids.push(new Paragraph({ text: s.heading.trim(), heading: HeadingLevel.HEADING_2 }));
             if (s.body?.trim()) kids.push(...markdownToParagraphs(s.body));
-            kids.push(new Paragraph({ text: "" })); // spacer
+            kids.push(new Paragraph({ text: "" }));
             return kids;
           }),
         ],
@@ -94,7 +86,6 @@ export async function POST(req: Request) {
     ],
   });
 
-  // Node Buffer -> Uint8Array (BodyInit accepts BufferSource, and Uint8Array satisfies TS)
   const buffer = await Packer.toBuffer(doc);
   const body = new Uint8Array(buffer);
 
