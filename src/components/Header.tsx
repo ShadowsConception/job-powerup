@@ -2,31 +2,6 @@
 
 import React, { useRef, useState } from "react";
 
-function ThemeToggle() {
-  const [theme, setTheme] = React.useState<"light" | "dark">("light");
-  React.useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-1.5 text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
-    </button>
-  );
-}
-
 export default function Header({ showAuth = true }: { showAuth?: boolean }) {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -48,8 +23,18 @@ export default function Header({ showAuth = true }: { showAuth?: boolean }) {
   return (
     <header className="sticky top-0 z-40 bg-white/70 dark:bg-gray-950/70 backdrop-blur-md border-b border-gray-200 dark:border-gray-800">
       <div className="mx-auto max-w-6xl px-6 py-5 flex items-center justify-between gap-6">
+        {/* Brand on the LEFT */}
+        <a
+          href="/"
+          className="text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 rounded-xl px-2 py-1 hover:bg-gray-100/70 dark:hover:bg-gray-800/60"
+          title="Job PowerUp"
+        >
+          Job&nbsp;PowerUp
+        </a>
+
         {/* Centered nav */}
         <nav className="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-10 text-[15px]">
+          {/* Tools */}
           <div
             className="relative"
             onMouseEnter={() => openWithCancel("tools")}
@@ -64,16 +49,13 @@ export default function Header({ showAuth = true }: { showAuth?: boolean }) {
                 onMouseEnter={() => openWithCancel("tools")}
                 onMouseLeave={() => closeWithDelay("tools")}
               >
-                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/">
-                  PowerUp My Resume
-                </a>
-                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">
-                  Results
-                </a>
+                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/">PowerUp My Resume</a>
+                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">Results</a>
               </div>
             )}
           </div>
 
+          {/* Help */}
           <div
             className="relative"
             onMouseEnter={() => openWithCancel("help")}
@@ -88,27 +70,21 @@ export default function Header({ showAuth = true }: { showAuth?: boolean }) {
                 onMouseEnter={() => openWithCancel("help")}
                 onMouseLeave={() => closeWithDelay("help")}
               >
-                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">
-                  Privacy
-                </a>
-                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/terms">
-                  Terms
-                </a>
-                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/contact">
-                  Contact
-                </a>
+                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">Privacy</a>
+                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/terms">Terms</a>
+                <a className="block px-4 py-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800" href="/contact">Contact</a>
               </div>
             )}
           </div>
         </nav>
 
-        {/* Right cluster: auth + theme + brand at far right */}
+        {/* Auth on the RIGHT */}
         <div className="ml-auto flex items-center gap-3">
           {showAuth && (
             <>
               <a
                 href="/login"
-                className="rounded-xl px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
+                className="rounded-xl px-3 py-2 text-sm text-white bg-gray-900 hover:bg-black"
               >
                 Log in
               </a>
@@ -120,14 +96,6 @@ export default function Header({ showAuth = true }: { showAuth?: boolean }) {
               </a>
             </>
           )}
-          <ThemeToggle />
-          <a
-            href="/"
-            className="ml-2 text-2xl md:text-3xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 rounded-xl px-3 py-1 hover:bg-gray-100/70 dark:hover:bg-gray-800/60"
-            title="Job PowerUp"
-          >
-            Job&nbsp;PowerUp
-          </a>
         </div>
       </div>
     </header>

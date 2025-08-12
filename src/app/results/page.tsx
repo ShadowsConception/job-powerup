@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Header from "@/components/Header";
+import FloatThemeToggle from "@/components/FloatThemeToggle";
 
 type QuizItem = { question: string; idealAnswer?: string };
 type ResultsPayload = {
@@ -20,30 +21,16 @@ function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
     </svg>
   );
 }
-
 function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 2200);
-    return () => clearTimeout(t);
-  }, [onClose]);
-  return (
-    <div className="fixed bottom-6 right-6 z-50">
-      <div className="rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">{message}</div>
-    </div>
-  );
+  useEffect(() => { const t = setTimeout(onClose, 2200); return () => clearTimeout(t); }, [onClose]);
+  return <div className="fixed bottom-6 right-6 z-50"><div className="rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">{message}</div></div>;
 }
 
-// text helpers (remove quotes; allow **bold**/*italic*; lists; paragraphs)
-function stripWrappingQuotes(s: string) {
-  const t = s.trim();
-  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("“") && t.endsWith("”"))) return t.slice(1, -1).trim();
-  return s;
-}
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-}
+// ----- formatting helpers -----
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
+const normalize = (s: string) => s.replace(/\r\n/g, "\n").replace(/\u00A0/g, " ").trim();
 function renderBasicMarkdown(md: string) {
-  let html = escapeHtml(md);
+  let html = escapeHtml(normalize(md));
   html = html.replace(/^##\s+(.+)$/gm, "<h3 class='mt-4 mb-2 font-semibold'>$1</h3>");
   html = html.replace(/^#\s+(.+)$/gm, "<h2 class='mt-4 mb-2 font-bold text-lg'>$1</h2>");
   html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
@@ -53,21 +40,28 @@ function renderBasicMarkdown(md: string) {
   html = html.replace(/\n{2,}/g, "</p><p>");
   return `<p>${html}</p>`;
 }
-
-// Copy helper
+function formatCoverLetter(raw: string) {
+  // Ensure paragraph spacing and typical letter flow
+  let s = normalize(raw);
+  // remove stray leading/trailing quotes
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("“") && s.endsWith("”"))) s = s.slice(1, -1).trim();
+  // enforce paragraphs
+  s = s.replace(/\n{3,}/g, "\n\n");
+  // if the letter has bullets, convert to lines
+  s = s.replace(/^\s*[-•]\s*/gm, "");
+  // add simple bold for section-like lines
+  s = s.replace(/^(Sincerely,|Best regards,?)$/gim, "**$1**");
+  return s;
+}
 async function copyToClipboard(text: string) {
   try {
     if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
-    else {
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
-    }
+    else { const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
     return true;
   } catch { return false; }
 }
 
-/** —— Assistant bubble preserved from previous version (already good) —— */
+// ----- chat bubble (same as before, omitted here for brevity) -----
 function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { resumeText?: string } }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,40 +69,28 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { res
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
   const [showHint, setShowHint] = useState(false);
 
-  useEffect(() => {
-    const seen = localStorage.getItem("jp_seen_chat_hint");
-    if (!seen) setShowHint(true);
-  }, []);
+  useEffect(() => { const seen = localStorage.getItem("jp_seen_chat_hint"); if (!seen) setShowHint(true); }, []);
 
   async function send() {
-    const text = input.trim();
-    if (!text) return;
+    const text = input.trim(); if (!text) return;
     const nextMsgs = [...messages, { role: "user", content: text }];
-    setMessages(nextMsgs);
-    setInput("");
+    setMessages(nextMsgs); setInput("");
     try {
       setBusy(true);
       const res = await fetch("/api/assistant-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMsgs, context }),
       });
       const data = await res.json().catch(() => ({}));
       const reply = data?.reply || "Sorry—I'm not sure. Could you rephrase?";
       setMessages([...nextMsgs, { role: "assistant", content: reply }]);
-    } catch {
-      setMessages([...nextMsgs, { role: "assistant", content: "Network hiccup — try again?" }]);
-    } finally {
-      setBusy(false);
-    }
+    } catch { setMessages([...nextMsgs, { role: "assistant", content: "Network hiccup — try again?" }]); }
+    finally { setBusy(false); }
   }
 
   function onOpen() {
     setOpen(true);
-    if (showHint) {
-      setShowHint(false);
-      localStorage.setItem("jp_seen_chat_hint", "1");
-    }
+    if (showHint) { setShowHint(false); localStorage.setItem("jp_seen_chat_hint", "1"); }
   }
 
   return (
@@ -156,7 +138,7 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { res
                         ? "bg-indigo-600 text-white"
                         : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100",
                     ].join(" ")}
-                    dangerouslySetInnerHTML={{ __html: m.role === "assistant" ? renderBasicMarkdown(m.content) : escapeHtml(m.content) }}
+                    dangerouslySetInnerHTML={{ __html: m.content }}
                   />
                 </div>
               </div>
@@ -183,12 +165,7 @@ function AssistantBubble({ context }: { context: Partial<ResultsPayload> & { res
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !busy && send()}
             />
-            <button
-              onClick={send}
-              disabled={busy}
-              className="rounded-xl px-3 py-2 text-sm text-white bg-gray-900 hover:bg-black disabled:opacity-50"
-              title="Send"
-            >
+            <button onClick={send} disabled={busy} className="rounded-xl px-3 py-2 text-sm text-white bg-gray-900 hover:bg-black disabled:opacity-50" title="Send">
               ➤
             </button>
           </div>
@@ -205,7 +182,6 @@ export default function ResultsPage() {
   const [quiz, setQuiz] = useState<QuizItem[]>([]);
   const [quizIdx, setQuizIdx] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
-  const [direction, setDirection] = useState<1 | -1>(1);
 
   const [loadingMoreQuiz, setLoadingMoreQuiz] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -225,31 +201,20 @@ export default function ResultsPage() {
       const raw = sessionStorage.getItem("jp_results");
       if (raw) {
         const parsed: ResultsPayload = JSON.parse(raw);
-        setImprovements(stripWrappingQuotes(parsed.improvements || ""));
-        setCoverLetter(stripWrappingQuotes(parsed.coverLetter || ""));
+        setImprovements(parsed.improvements || "");
+        setCoverLetter(parsed.coverLetter || "");
         setQuiz(Array.isArray(parsed.quizItems) ? parsed.quizItems : []);
         setResumeFilename(parsed.resumeFilename || "");
         setJobDescriptionChars((parsed.jobDescription || "").length || 0);
       }
-      const t = sessionStorage.getItem("jp_import_title");
-      if (t && t.trim()) setJobTitle(t.trim());
-      const rt = sessionStorage.getItem("jp_resume_text");
-      if (rt) setResumeText(rt);
-      const toast = sessionStorage.getItem("jp_toast");
-      if (toast) { setToastMsg(toast); sessionStorage.removeItem("jp_toast"); }
+      const t = sessionStorage.getItem("jp_import_title"); if (t && t.trim()) setJobTitle(t.trim());
+      const rt = sessionStorage.getItem("jp_resume_text"); if (rt) setResumeText(rt);
+      const toast = sessionStorage.getItem("jp_toast"); if (toast) { setToastMsg(toast); sessionStorage.removeItem("jp_toast"); }
     } catch {}
   }, []);
 
-  useEffect(() => {
-    function onScroll() { setShowTop(window.scrollY > 420); }
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    if (panelRef.current) panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    else window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeTab]);
+  useEffect(() => { function onScroll() { setShowTop(window.scrollY > 420); } window.addEventListener("scroll", onScroll); return () => window.removeEventListener("scroll", onScroll); }, []);
+  useEffect(() => { if (panelRef.current) panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" }); else window.scrollTo({ top: 0, behavior: "smooth" }); }, [activeTab]);
 
   const title = useMemo(() => (resumeFilename ? `Results for ${resumeFilename}` : "Your Results"), [resumeFilename]);
 
@@ -270,7 +235,10 @@ export default function ResultsPage() {
       setToastMsg("DOCX downloaded 📄");
     } catch { setToastMsg("Export failed"); } finally { setDownloading(false); }
   }
-
+  async function downloadBothDocx() {
+    await downloadDocx("resume-improvements", improvements);
+    await downloadDocx("cover-letter", formatCoverLetter(coverLetter));
+  }
   async function regenerateQuestions() {
     try {
       setLoadingMoreQuiz(true);
@@ -282,16 +250,11 @@ export default function ResultsPage() {
       });
       const body = await res.json().catch(() => ({}));
       const items = Array.isArray(body?.items) ? body.items : [];
-      setQuiz(items); setQuizIdx(0); setShowAnswer(false); setDirection(1);
+      setQuiz(items); setQuizIdx(0); setShowAnswer(false);
       setToastMsg("New questions 🔄");
     } catch { setToastMsg("Couldn't refresh questions"); } finally { setLoadingMoreQuiz(false); }
   }
 
-  // flashcards small helpers
-  function nextCard() { if (!quiz.length) return; setDirection(1); setShowAnswer(false); setQuizIdx((i) => (i + 1) % quiz.length); }
-  function prevCard() { if (!quiz.length) return; setDirection(-1); setShowAnswer(false); setQuizIdx((i) => (i - 1 + quiz.length) % quiz.length); }
-
-  // empty state
   if (!improvements && !coverLetter && !quiz.length) {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
@@ -303,6 +266,7 @@ export default function ResultsPage() {
             <a href="/" className={btnPrimary}>PowerUp my resume</a>
           </div>
         </main>
+        <FloatThemeToggle />
       </div>
     );
   }
@@ -311,20 +275,27 @@ export default function ResultsPage() {
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
       <Header showAuth={false} />
 
-      {/* Title */}
-      <div className="mx-auto max-w-4xl px-6 pt-10 pb-4 text-center">
-        <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-          {title}{jobTitle ? ` — ${jobTitle}` : ""}
-        </h1>
-        <p className="mt-2 text-gray-600 dark:text-gray-400">
-          Tailored improvements, a cover letter, and interview practice.
-          <span className="ml-2 text-gray-400 dark:text-gray-500 text-sm">JD chars: {jobDescriptionChars.toLocaleString()}</span>
-        </p>
+      {/* Title + bulk download */}
+      <div className="mx-auto max-w-4xl px-6 pt-10 pb-4">
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+              {title}{jobTitle ? ` — ${jobTitle}` : ""}
+            </h1>
+            <p className="mt-2 text-gray-600 dark:text-gray-400">
+              Tailored improvements, a cover letter, and interview practice.
+              <span className="ml-2 text-gray-400 dark:text-gray-500 text-sm">JD chars: {jobDescriptionChars.toLocaleString()}</span>
+            </p>
+          </div>
+          <button onClick={downloadBothDocx} className={btnPrimary} disabled={downloading || !(improvements && coverLetter)}>
+            {downloading ? <span className="inline-flex items-center"><Spinner />Saving…</span> : "Download BOTH DOCX"}
+          </button>
+        </div>
       </div>
 
-      {/* Tabs */}
       <main className="flex-1">
         <div className="mx-auto max-w-4xl px-6">
+          {/* Tabs */}
           <div className="mx-auto mb-6 flex w-full items-center justify-center">
             <div className="inline-flex rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-1 shadow-sm">
               {[
@@ -351,65 +322,42 @@ export default function ResultsPage() {
             </div>
           </div>
 
+          {/* Panels */}
           <div ref={panelRef} className="space-y-6">
-            {/* Improvements (non-editable, formatted) */}
+            {/* Improvements */}
             {activeTab === "improve" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">How to Improve Your Resume</h2>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={async () => setToastMsg((await copyToClipboard(improvements)) ? "Copied 👍" : "Copy failed")}
-                      className={btnGhost}
-                      disabled={!improvements.trim()}
-                    >
-                      Copy
-                    </button>
-                    <button
-                      onClick={() => downloadDocx("resume-improvements", improvements)}
-                      className={btnPrimary}
-                      disabled={!improvements.trim() || downloading}
-                    >
+                    <button onClick={async () => setToastMsg((await copyToClipboard(improvements)) ? "Copied 👍" : "Copy failed")} className={btnGhost} disabled={!improvements.trim()}>Copy</button>
+                    <button onClick={() => downloadDocx("resume-improvements", improvements)} className={btnPrimary} disabled={!improvements.trim() || downloading}>
                       {downloading ? <span className="inline-flex items-center"><Spinner />Saving…</span> : "Save as DOCX"}
                     </button>
                   </div>
                 </div>
-                <div className="prose dark:prose-invert max-w-none">
-                  <div
-                    className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 leading-7"
-                    dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(improvements) }}
-                  />
+                <div className="prose dark:prose-invert max-w-none leading-7">
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+                       dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(improvements) }} />
                 </div>
               </div>
             )}
 
-            {/* Cover Letter (non-editable, formatted) */}
+            {/* Cover Letter */}
             {activeTab === "cover" && (
               <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Cover Letter</h2>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={async () => setToastMsg((await copyToClipboard(coverLetter)) ? "Copied 👍" : "Copy failed")}
-                      className={btnGhost}
-                      disabled={!coverLetter.trim()}
-                    >
-                      Copy
-                    </button>
-                    <button
-                      onClick={() => downloadDocx("cover-letter", coverLetter)}
-                      className={btnPrimary}
-                      disabled={!coverLetter.trim() || downloading}
-                    >
+                    <button onClick={async () => setToastMsg((await copyToClipboard(formatCoverLetter(coverLetter))) ? "Copied 👍" : "Copy failed")} className={btnGhost} disabled={!coverLetter.trim()}>Copy</button>
+                    <button onClick={() => downloadDocx("cover-letter", formatCoverLetter(coverLetter))} className={btnPrimary} disabled={!coverLetter.trim() || downloading}>
                       {downloading ? <span className="inline-flex items-center"><Spinner />Saving…</span> : "Save as DOCX"}
                     </button>
                   </div>
                 </div>
-                <div className="prose dark:prose-invert max-w-none">
-                  <div
-                    className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 leading-7"
-                    dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(coverLetter) }}
-                  />
+                <div className="prose dark:prose-invert max-w-none leading-7">
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100"
+                       dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(formatCoverLetter(coverLetter)) }} />
                 </div>
               </div>
             )}
@@ -432,15 +380,12 @@ export default function ResultsPage() {
                       <span>Card {quizIdx + 1} / {quiz.length}</span>
                       <div className="flex gap-1">
                         {quiz.map((_, i) => (
-                          <span key={i} className={["inline-block h-2 w-2 rounded-full", i === quizIdx ? "bg-emerald-600" : "bg-gray-300 dark:bg-gray-700"].join(" ")} />
+                          <span key={i} className={`inline-block h-2 w-2 rounded-full ${i === quizIdx ? "bg-emerald-600" : "bg-gray-300 dark:bg-gray-700"}`} />
                         ))}
                       </div>
                     </div>
 
-                    <div
-                      key={`${quizIdx}-${showAnswer}`}
-                      className="p-5 md:p-6 border border-gray-200 dark:border-gray-800 rounded-2xl bg-white dark:bg-gray-950 shadow-sm"
-                    >
+                    <div className="p-5 md:p-6 border border-gray-200 dark:border-gray-800 rounded-2xl bg-white dark:bg-gray-950 shadow-sm">
                       <p className="font-medium text-gray-900 dark:text-gray-100">{quiz[quizIdx].question}</p>
                       {showAnswer && (
                         <p className="mt-3 text-gray-800 dark:text-gray-200 leading-relaxed">
@@ -451,14 +396,10 @@ export default function ResultsPage() {
                     </div>
 
                     <div className="mt-4 flex flex-wrap gap-3">
-                      <button onClick={() => { setShowAnswer(false); setDirection(-1); setQuizIdx((i) => (i - 1 + quiz.length) % quiz.length); }} className={btnGhost}>◀ Prev</button>
-                      <button onClick={() => setShowAnswer((s) => !s)} className={btnGhost}>
-                        {showAnswer ? "Hide Ideal Answer" : "Show Ideal Answer"}
-                      </button>
-                      <button onClick={() => { setShowAnswer(false); setDirection(1); setQuizIdx((i) => (i + 1) % quiz.length); }} className={btnGhost}>Next ▶</button>
+                      <button onClick={() => { setShowAnswer(false); setQuizIdx((i) => (i - 1 + quiz.length) % quiz.length); }} className={btnGhost}>◀ Prev</button>
+                      <button onClick={() => setShowAnswer((s) => !s)} className={btnGhost}>{showAnswer ? "Hide Ideal Answer" : "Show Ideal Answer"}</button>
+                      <button onClick={() => { setShowAnswer(false); setQuizIdx((i) => (i + 1) % quiz.length); }} className={btnGhost}>Next ▶</button>
                     </div>
-
-                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Tip: use ← / → to switch, press “A” to toggle answer.</p>
                   </>
                 )}
               </div>
@@ -480,18 +421,18 @@ export default function ResultsPage() {
         </button>
       )}
 
-      {/* Chat bubble with full context */}
       <AssistantBubble
         context={{
           improvements,
-          coverLetter,
+          coverLetter: formatCoverLetter(coverLetter),
           jobDescription: (JSON.parse(sessionStorage.getItem("jp_results") || "{}")?.jobDescription) || "",
           resumeFilename,
           resumeText,
         }}
       />
 
-      {/* Footer */}
+      <FloatThemeToggle />
+
       <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
           <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
