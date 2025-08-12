@@ -56,6 +56,9 @@ export default function LandingPage() {
   const [validated, setValidated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Upload zone highlight (for drag & drop)
+  const [dragActive, setDragActive] = useState(false);
+
   // Menus with hover-delay so you can move into them
   const [toolsOpen, setToolsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -154,6 +157,25 @@ export default function LandingPage() {
     if (f) validateSelectedFile(f);
   }
 
+  // Drag & drop handlers
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(true);
+  }
+  function onDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+  }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f) {
+      setFile(f);
+      validateSelectedFile(f);
+    }
+  }
+
   async function handleGenerateAll() {
     if (!file) return alert("Upload a PDF or DOCX Resume first.");
     if (!validated) return alert("Please wait — we’re validating your Resume.");
@@ -243,10 +265,12 @@ export default function LandingPage() {
               onMouseEnter={() => openWithCancel("tools")}
               onMouseLeave={() => closeWithDelay("tools")}
             >
-              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Tools ▾</button>
+              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80" aria-haspopup="menu" aria-expanded={toolsOpen}>
+                Tools ▾
+              </button>
               {toolsOpen && (
                 <div
-                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
                   onMouseEnter={() => openWithCancel("tools")}
                   onMouseLeave={() => closeWithDelay("tools")}
                 >
@@ -266,10 +290,12 @@ export default function LandingPage() {
               onMouseEnter={() => openWithCancel("help")}
               onMouseLeave={() => closeWithDelay("help")}
             >
-              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Help ▾</button>
+              <button className="text-gray-700 dark:text-gray-300 hover:opacity-80" aria-haspopup="menu" aria-expanded={helpOpen}>
+                Help ▾
+              </button>
               {helpOpen && (
                 <div
-                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  className="absolute left-0 mt-2 w-52 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
                   onMouseEnter={() => openWithCancel("help")}
                   onMouseLeave={() => closeWithDelay("help")}
                 >
@@ -288,10 +314,16 @@ export default function LandingPage() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <a href="/login" className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800">
+            <a
+              href="/login"
+              className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
+            >
               Log in
             </a>
-            <a href="/signup" className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600">
+            <a
+              href="/signup"
+              className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600"
+            >
               Sign up
             </a>
             <ThemeToggle />
@@ -310,12 +342,25 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Upload card with large dashed area */}
-        <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+        {/* Upload card with larger dashed area + drag & drop */}
+        <div className="mx-auto max-w-3xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
           <div>
             <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload Your Resume (PDF or DOCX)</h2>
 
-            <div className="rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40 p-8 md:p-10 text-center">
+            <div
+              className={[
+                "rounded-2xl border-2 border-dashed",
+                dragActive ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30" : "border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40",
+                "p-10 md:p-12 text-center transition-colors",
+              ].join(" ")}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              role="button"
+              aria-label="Upload your resume by clicking or dragging a file here"
+              tabIndex={0}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && chooseFile()}
+            >
               <input
                 ref={hiddenInputRef}
                 type="file"
@@ -325,13 +370,17 @@ export default function LandingPage() {
               />
 
               <button
-                onClick={() => hiddenInputRef.current?.click()}
+                onClick={chooseFile}
                 disabled={validating}
                 className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
               >
                 {validating ? <Spinner className="h-5 w-5 mr-2" /> : null}
-                {validating ? "Validating…" : "Choose Files"}
+                {validating ? "Validating…" : "Choose File"}
               </button>
+
+              <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
+                or drag & drop here
+              </div>
 
               {file?.name && (
                 <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
@@ -383,7 +432,7 @@ export default function LandingPage() {
               <div>
                 <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
                 <textarea
-                  className={`${taBase} h-72`}
+                  className={`${taBase} h-80`}
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
                   placeholder="Paste the full job posting here… (or import from a link above)"
