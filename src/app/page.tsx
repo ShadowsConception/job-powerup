@@ -46,26 +46,38 @@ export default function LandingPage() {
   const [jobUrl, setJobUrl] = useState("");
   const [importTitle, setImportTitle] = useState<string | null>(null);
 
-  // UX + progress states
+  // UX + progress
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState<null | string>(null);
-  const [importing, setImporting] = useState(false);
 
-  // Validation states
+  // Validation
   const [validating, setValidating] = useState(false);
   const [validated, setValidated] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Menus open state (auto-close on mouse leave)
+  // Menus with hover-delay so you can move into them
   const [toolsOpen, setToolsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const toolsTimer = useRef<number | null>(null);
+  const helpTimer = useRef<number | null>(null);
+  const openWithCancel = (which: "tools" | "help") => {
+    const t = which === "tools" ? toolsTimer : helpTimer;
+    if (t.current) window.clearTimeout(t.current);
+    (which === "tools" ? setToolsOpen : setHelpOpen)(true);
+  };
+  const closeWithDelay = (which: "tools" | "help") => {
+    const t = which === "tools" ? toolsTimer : helpTimer;
+    if (t.current) window.clearTimeout(t.current);
+    t.current = window.setTimeout(() => {
+      (which === "tools" ? setToolsOpen : setHelpOpen)(false);
+    }, 180);
+  };
 
   // Footer year + brand
   const currentYear = new Date().getFullYear();
   const BRAND = "Job PowerUp";
 
-  // Restore JD if present
   useEffect(() => {
     const jd = sessionStorage.getItem("jp_resume_jobDescription");
     if (jd) setJobDescription(jd);
@@ -81,13 +93,12 @@ export default function LandingPage() {
   const btnBase =
     "inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
-  // Import job link (kept; we just removed bookmarklet mentions)
+  // Import job link (still supported)
   async function importFromLink() {
     if (!jobUrl.trim()) {
       alert("Paste a job posting link first.");
       return;
     }
-    setImporting(true);
     try {
       const res = await fetch("/api/job-from-link", {
         method: "POST",
@@ -106,8 +117,6 @@ export default function LandingPage() {
       sessionStorage.setItem("jp_toast", "Imported job description from link ✅");
     } catch (e: any) {
       alert(String(e?.message || "Could not import from that link."));
-    } finally {
-      setImporting(false);
     }
   }
 
@@ -145,18 +154,14 @@ export default function LandingPage() {
     if (f) validateSelectedFile(f);
   }
 
-  function startProgressBar() {
-    setProgress(5);
-    setStatus("Starting…");
-  }
-
   async function handleGenerateAll() {
     if (!file) return alert("Upload a PDF or DOCX Resume first.");
     if (!validated) return alert("Please wait — we’re validating your Resume.");
     if (!jobDescription.trim()) return alert("Paste the job description (or import from link) first.");
 
     setLoading(true);
-    startProgressBar();
+    setStatus("Starting…");
+    setProgress(10);
 
     try {
       const fdAnalyze = new FormData();
@@ -213,7 +218,7 @@ export default function LandingPage() {
       setProgress(100);
       setStatus("Done!");
       router.push("/results");
-    } catch (e) {
+    } catch {
       alert("Something went wrong generating results.");
     } finally {
       setLoading(false);
@@ -224,7 +229,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      {/* Header with hover dropdowns */}
+      {/* Header with hover-delay dropdowns */}
       <header className="border-b border-gray-200 dark:border-gray-800">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
           <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
@@ -232,32 +237,51 @@ export default function LandingPage() {
           </a>
 
           <nav className="hidden md:flex items-center gap-8 text-sm relative">
-            {/* Tools menu */}
+            {/* Tools */}
             <div
               className="relative"
-              onMouseEnter={() => setToolsOpen(true)}
-              onMouseLeave={() => setToolsOpen(false)}
+              onMouseEnter={() => openWithCancel("tools")}
+              onMouseLeave={() => closeWithDelay("tools")}
             >
               <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Tools ▾</button>
               {toolsOpen && (
-                <div className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2">
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/">Resume Converter</a>
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">Results</a>
+                <div
+                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  onMouseEnter={() => openWithCancel("tools")}
+                  onMouseLeave={() => closeWithDelay("tools")}
+                >
+                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/">
+                    PowerUp My Resume
+                  </a>
+                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/results">
+                    Results
+                  </a>
                 </div>
               )}
             </div>
 
-            {/* Help menu (no Import Helper) */}
+            {/* Help */}
             <div
               className="relative"
-              onMouseEnter={() => setHelpOpen(true)}
-              onMouseLeave={() => setHelpOpen(false)}
+              onMouseEnter={() => openWithCancel("help")}
+              onMouseLeave={() => closeWithDelay("help")}
             >
               <button className="text-gray-700 dark:text-gray-300 hover:opacity-80">Help ▾</button>
               {helpOpen && (
-                <div className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2">
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">Privacy</a>
-                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/terms">Terms</a>
+                <div
+                  className="absolute left-0 mt-2 w-48 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  onMouseEnter={() => openWithCancel("help")}
+                  onMouseLeave={() => closeWithDelay("help")}
+                >
+                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/privacy">
+                    Privacy
+                  </a>
+                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/terms">
+                    Terms
+                  </a>
+                  <a className="block px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" href="/contact">
+                    Contact
+                  </a>
                 </div>
               )}
             </div>
@@ -279,7 +303,7 @@ export default function LandingPage() {
       <main className="flex-1">
         <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-            Resume Converter
+            PowerUp My Resume
           </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
             Upload a Resume, then add a job description to generate tailored outputs.
@@ -288,7 +312,6 @@ export default function LandingPage() {
 
         {/* Upload card with large dashed area */}
         <div className="mx-auto max-w-2xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
-          {/* Big dashed dropzone-style uploader */}
           <div>
             <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload Your Resume (PDF or DOCX)</h2>
 
@@ -302,7 +325,7 @@ export default function LandingPage() {
               />
 
               <button
-                onClick={chooseFile}
+                onClick={() => hiddenInputRef.current?.click()}
                 disabled={validating}
                 className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
               >
@@ -328,10 +351,9 @@ export default function LandingPage() {
             </p>
           </div>
 
-          {/* Only show these AFTER validation succeeds */}
+          {/* Reveal only after validation succeeds */}
           {validated && (
             <>
-              {/* Import from link */}
               <div className="space-y-2">
                 <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
                 <div className="flex flex-col gap-2 sm:flex-row">
@@ -345,11 +367,10 @@ export default function LandingPage() {
                   />
                   <button
                     onClick={importFromLink}
-                    disabled={importing || !jobUrl.trim()}
+                    disabled={!jobUrl.trim()}
                     className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50"
                   >
-                    {importing && <Spinner />}
-                    {importing ? "Importing…" : "Import from link"}
+                    Import from link
                   </button>
                 </div>
                 {importTitle && (
@@ -359,7 +380,6 @@ export default function LandingPage() {
                 )}
               </div>
 
-              {/* JD textarea */}
               <div>
                 <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
                 <textarea
@@ -373,21 +393,11 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Generate + Progress */}
               <div className="space-y-3">
                 <button
                   onClick={handleGenerateAll}
                   disabled={!isReadyToGenerate}
                   className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
-                  title={
-                    !file
-                      ? "Upload a Resume to enable"
-                      : !validated
-                      ? "Waiting for Resume validation"
-                      : !jobDescription.trim()
-                      ? "Paste a job description to enable"
-                      : "Generate results"
-                  }
                 >
                   {loading && <Spinner />}
                   {loading ? "Generating…" : "Generate"}
@@ -410,8 +420,6 @@ export default function LandingPage() {
             </>
           )}
         </div>
-
-        {/* Toast handled on results page */}
       </main>
 
       {/* Footer */}
