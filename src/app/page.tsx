@@ -59,6 +59,9 @@ export default function LandingPage() {
   // Upload zone highlight (for drag & drop)
   const [dragActive, setDragActive] = useState(false);
 
+  // “Import from link” spinner
+  const [importing, setImporting] = useState(false);
+
   // Menus with hover-delay so you can move into them
   const [toolsOpen, setToolsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -90,19 +93,20 @@ export default function LandingPage() {
 
   // Styles
   const inputBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const taBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y";
   const btnBase =
     "inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
-  // Import job link (still supported)
+  // Import job link (with spinner)
   async function importFromLink() {
     if (!jobUrl.trim()) {
       alert("Paste a job posting link first.");
       return;
     }
     try {
+      setImporting(true);
       const res = await fetch("/api/job-from-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -120,6 +124,8 @@ export default function LandingPage() {
       sessionStorage.setItem("jp_toast", "Imported job description from link ✅");
     } catch (e: any) {
       alert(String(e?.message || "Could not import from that link."));
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -359,7 +365,7 @@ export default function LandingPage() {
               role="button"
               aria-label="Upload your resume by clicking or dragging a file here"
               tabIndex={0}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && chooseFile()}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && hiddenInputRef.current?.click()}
             >
               <input
                 ref={hiddenInputRef}
@@ -370,9 +376,9 @@ export default function LandingPage() {
               />
 
               <button
-                onClick={chooseFile}
+                onClick={() => hiddenInputRef.current?.click()}
                 disabled={validating}
-                className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                className="inline-flex items-center justify-center rounded-xl px-6 md:px-8 py-3 md:py-4 font-semibold text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700 disabled:opacity-60"
               >
                 {validating ? <Spinner className="h-5 w-5 mr-2" /> : null}
                 {validating ? "Validating…" : "Choose File"}
@@ -393,6 +399,10 @@ export default function LandingPage() {
                   {validationError}
                 </div>
               )}
+
+              <p className="mt-6 text-xs text-gray-500 dark:text-gray-400">
+                By uploading, you agree to our <a className="underline" href="/terms">Terms</a>.
+              </p>
             </div>
 
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
@@ -404,7 +414,10 @@ export default function LandingPage() {
           {validated && (
             <>
               <div className="space-y-2">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Have a job link?</h2>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Using a link? Skip paste.</span>
+                </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     className={`${inputBase} flex-1`}
@@ -416,10 +429,11 @@ export default function LandingPage() {
                   />
                   <button
                     onClick={importFromLink}
-                    disabled={!jobUrl.trim()}
+                    disabled={!jobUrl.trim() || importing}
                     className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium bg-gray-900 text-white hover:bg-black disabled:opacity-50"
                   >
-                    Import from link
+                    {importing ? <Spinner /> : null}
+                    {importing ? "Importing…" : "Import from link"}
                   </button>
                 </div>
                 {importTitle && (
@@ -430,7 +444,10 @@ export default function LandingPage() {
               </div>
 
               <div>
-                <h2 className="text-lg font-semibold mb-2 text-gray-900 dark:text-gray-100">Job Description</h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Job Description</h2>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Paste only if no link.</span>
+                </div>
                 <textarea
                   className={`${taBase} h-80`}
                   value={jobDescription}
@@ -446,7 +463,7 @@ export default function LandingPage() {
                 <button
                   onClick={handleGenerateAll}
                   disabled={!isReadyToGenerate}
-                  className={`${btnBase} bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 w-full`}
+                  className={`${btnBase} w-full text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700`}
                 >
                   {loading && <Spinner />}
                   {loading ? "Generating…" : "Generate"}
@@ -456,7 +473,7 @@ export default function LandingPage() {
                   <div className="w-full">
                     <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
                       <div
-                        className="h-2 bg-indigo-600 dark:bg-indigo-500 transition-all duration-300"
+                        className="h-2 bg-gradient-to-r from-indigo-600 to-fuchsia-600 transition-all duration-300"
                         style={{ width: `${progress}%` }}
                       />
                     </div>

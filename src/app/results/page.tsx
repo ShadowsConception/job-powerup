@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-type QuizItem = { question: string; idealAnswer: string };
+type QuizItem = { question: string; answer?: string };
+type ResultsPayload = {
+  improvements: string;
+  coverLetter: string;
+  quizItems: QuizItem[];
+  jobDescription: string;
+  resumeFilename: string;
+};
 
 function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   return (
@@ -13,22 +20,9 @@ function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   );
 }
 
-function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 3500);
-    return () => clearTimeout(t);
-  }, [onClose]);
-  return (
-    <div className="fixed bottom-6 right-6 z-50">
-      <div className="rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">{message}</div>
-    </div>
-  );
-}
-
 function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   useEffect(() => {
-    if (typeof window === "undefined") return;
     const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
     setTheme(saved);
     document.documentElement.classList.toggle("dark", saved === "dark");
@@ -36,10 +30,8 @@ function ThemeToggle() {
   function toggle() {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("jp_theme", next);
-      document.documentElement.classList.toggle("dark", next === "dark");
-    }
+    localStorage.setItem("jp_theme", next);
+    document.documentElement.classList.toggle("dark", next === "dark");
   }
   return (
     <button
@@ -54,370 +46,290 @@ function ThemeToggle() {
 }
 
 export default function ResultsPage() {
-  const [activeTab, setActiveTab] = useState<"improve" | "cover" | "quiz">("improve");
-  const [improvements, setImprovements] = useState("");
-  const [coverLetter, setCoverLetter] = useState("");
-  const [quiz, setQuiz] = useState<QuizItem[]>([]);
-  const [quizIdx, setQuizIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-
-  const [loadingMoreQuiz, setLoadingMoreQuiz] = useState(false);
-  const [resumeFilename, setResumeFilename] = useState("");
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [jobDescriptionChars, setJobDescriptionChars] = useState(0);
-  const [jobTitle, setJobTitle] = useState<string | null>(null); // NEW
-
-  const [improveDirty, setImproveDirty] = useState(false);
-  const [coverDirty, setCoverDirty] = useState(false);
-
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const prevTabRef = useRef<"improve" | "cover" | "quiz">("improve");
-  const saveTimerRef = useRef<number | null>(null);
+  const [data, setData] = useState<ResultsPayload | null>(null);
+  const [active, setActive] = useState<"improve" | "cover" | "quiz">("improve");
+  const [regen, setRegen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const raw = sessionStorage.getItem("jp_results");
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw);
-        setImprovements(parsed.improvements || "");
-        setCoverLetter(parsed.coverLetter || "");
-        setQuiz(Array.isArray(parsed.quizItems) ? parsed.quizItems : []);
-        setResumeFilename(parsed.resumeFilename || "");
-        setJobDescriptionChars((parsed.jobDescription || "").length || 0);
-      } catch {}
+    try {
+      const raw = sessionStorage.getItem("jp_results");
+      if (!raw) return;
+      const parsed: ResultsPayload = JSON.parse(raw);
+      setData(parsed);
+    } catch {
+      // ignore
     }
-    const toast = sessionStorage.getItem("jp_toast");
-    if (toast) {
-      setToastMsg(toast);
-      sessionStorage.removeItem("jp_toast");
-    }
-    // pull imported title if available
-    const t = sessionStorage.getItem("jp_import_title");
-    if (t && t.trim()) setJobTitle(t.trim());
   }, []);
 
-  useEffect(() => {
-    if (panelRef.current) panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeTab]);
+  const title = useMemo(() => {
+    if (!data?.resumeFilename) return "Your Results";
+    return `Results for ${data.resumeFilename}`;
+  }, [data]);
 
-  function scheduleSave(field: "improvements" | "coverLetter", value: string) {
-    if (typeof window === "undefined") return;
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => {
-      const raw = sessionStorage.getItem("jp_results");
-      let parsed: any = {};
-      try {
-        parsed = raw ? JSON.parse(raw) : {};
-      } catch {}
-      parsed[field] = value;
-      sessionStorage.setItem("jp_results", JSON.stringify(parsed));
-    }, 400);
-  }
-
-  useEffect(() => {
-    const prev = prevTabRef.current;
-    if (prev !== activeTab) {
-      let savedSomething = false;
-      if (prev === "improve" && improveDirty) {
-        scheduleSave("improvements", improvements);
-        setImproveDirty(false);
-        savedSomething = true;
-      }
-      if (prev === "cover" && coverDirty) {
-        scheduleSave("coverLetter", coverLetter);
-        setCoverDirty(false);
-        savedSomething = true;
-      }
-      if (savedSomething) setToastMsg("Saved! 💾");
-      prevTabRef.current = activeTab;
-    }
-  }, [activeTab, improvements, coverLetter, improveDirty, coverDirty]);
-
-  const btnTab =
-    "px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99] text-sm md:text-base";
-  const isDisabled = (s: string) => !s || s.trim().length === 0;
-
-  async function copyToClipboard(text: string) {
+  async function copy(text: string) {
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
-      else {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-      setToastMsg("Copied to clipboard 👍");
+      await navigator.clipboard.writeText(text);
+      alert("Copied!");
     } catch {
-      alert("Couldn’t copy to clipboard.");
+      alert("Could not copy.");
     }
   }
 
-  async function downloadDocx(title: string, body: string) {
+  async function regenerateQuestions() {
+    if (!data?.jobDescription) return;
     try {
+      setRegen(true);
+      const res = await fetch("/api/interview-quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobDescription: data.jobDescription, count: 10 }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const items = Array.isArray(body?.items) ? body.items : [];
+      const next: ResultsPayload = { ...data, quizItems: items };
+      setData(next);
+      sessionStorage.setItem("jp_results", JSON.stringify(next));
+    } catch {
+      alert("Couldn't generate more questions.");
+    } finally {
+      setRegen(false);
+    }
+  }
+
+  async function downloadDocx() {
+    if (!data) return;
+    try {
+      setDownloading(true);
       const res = await fetch("/api/export-docx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, sections: [{ heading: title, body }] }),
+        body: JSON.stringify(data),
       });
-      if (!res.ok) throw new Error("docx export failed");
+      if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${title.replace(/\s+/g, "_").toLowerCase()}.docx`;
+      const base = (data.resumeFilename || "resume").replace(/[^\w.-]+/g, "_");
+      a.download = `${base.replace(/\.[^.]+$/, "")}-job-powerup.docx`;
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       URL.revokeObjectURL(url);
-      setToastMsg("DOCX downloaded ✅");
-    } catch (e) {
-      console.error(e);
-      alert("DOCX export failed.");
-    }
-  }
-
-  async function handleGenerateMoreQuiz() {
-    if (typeof window === "undefined") return;
-    const raw = sessionStorage.getItem("jp_results");
-    let jobDescription = "";
-    if (raw) {
-      try {
-        jobDescription = JSON.parse(raw)?.jobDescription || "";
-      } catch {}
-    }
-    if (!jobDescription.trim()) {
-      alert("Missing job description. Go back and generate again.");
-      return;
-    }
-
-    setLoadingMoreQuiz(true);
-    try {
-      const res = await fetch("/api/interview-quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobDescription, count: 10 }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "quiz failed");
-      const items: QuizItem[] = Array.isArray(data.items) ? data.items : [];
-      setQuiz(items);
-      setQuizIdx(0);
-      setShowAnswer(false);
-      setToastMsg("New questions generated 🔄");
     } catch (e: any) {
-      console.error(e);
-      alert(`Failed to generate questions: ${e.message || e}`);
+      alert(e?.message || "Couldn't export DOCX.");
     } finally {
-      setLoadingMoreQuiz(false);
+      setDownloading(false);
     }
   }
 
-  const taBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y";
+  if (!data) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
+        <header className="border-b border-gray-200 dark:border-gray-800">
+          <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+            <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">Job PowerUp</a>
+            <div className="flex items-center gap-2"><ThemeToggle /></div>
+          </div>
+        </header>
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center px-6">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">No results yet</h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">Upload a resume and job description to generate results.</p>
+            <a href="/" className="inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium text-white bg-indigo-600 hover:bg-indigo-700">
+              Back to edit
+            </a>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <div className="mx-auto max-w-5xl px-6 py-10 space-y-6">
-        <header className="flex items-center justify-between flex-wrap gap-3">
-          <div className="min-w-0">
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-              Your Results{jobTitle ? ` — ${jobTitle}` : ""}
-            </h1>
-            <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 mt-1 line-clamp-1" title={jobTitle || undefined}>
-              {jobTitle ? `Job: ${jobTitle}` : "Switch tabs to view each artifact."}{" "}
-              <span className="text-gray-400 dark:text-gray-500">
-                {`Job description chars: ${jobDescriptionChars.toLocaleString()}`}
-              </span>
-            </p>
-            {resumeFilename && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Source résumé: {resumeFilename}</p>
-            )}
-          </div>
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
+      {/* Header */}
+      <header className="border-b border-gray-200 dark:border-gray-800">
+        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
+          <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+            Job PowerUp
+          </a>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  const raw = sessionStorage.getItem("jp_results");
-                  if (raw) {
-                    try {
-                      const parsed = JSON.parse(raw);
-                      sessionStorage.setItem("jp_resume_jobDescription", parsed.jobDescription || "");
-                      sessionStorage.setItem("jp_resume_filename", parsed.resumeFilename || "");
-                    } catch {}
-                  }
-                  // keep jobTitle in storage so it shows on landing again if needed
-                  window.location.href = "/";
-                }
-              }}
-              className="px-4 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm md:text-base"
+            <a
+              href="/"
+              className="rounded-xl px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
-              Back to Edit
+              Back to edit
+            </a>
+            <button
+              onClick={downloadDocx}
+              className="rounded-xl px-3 py-1.5 text-sm text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700"
+              disabled={downloading}
+            >
+              {downloading ? "Preparing…" : "Download as DOCX"}
             </button>
             <ThemeToggle />
           </div>
-        </header>
-
-        {/* Tabs */}
-        <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab("improve")}
-            className={`${btnTab} ${
-              activeTab === "improve" ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800" : ""
-            }`}
-          >
-            Résumé Improvements
-          </button>
-          <button
-            onClick={() => setActiveTab("cover")}
-            className={`${btnTab} ${
-              activeTab === "cover" ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800" : ""
-            }`}
-          >
-            Cover Letter
-          </button>
-          <button
-            onClick={() => setActiveTab("quiz")}
-            className={`${btnTab} ${
-              activeTab === "quiz" ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-800" : ""
-            }`}
-          >
-            Interview Questions
-          </button>
         </div>
+      </header>
 
-        {/* Panels */}
-        <div
-          ref={panelRef}
-          className="bg-white dark:bg-gray-950 rounded-2xl shadow p-5 md:p-6 border border-gray-200 dark:border-gray-800"
-        >
-          {activeTab === "improve" && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  What to Improve in Your Résumé for This Job
-                </h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{improvements.length.toLocaleString()} chars</span>
-                  <button
-                    onClick={() => {
-                      copyToClipboard(improvements);
-                    }}
-                    disabled={isDisabled(improvements)}
-                    className="px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm disabled:opacity-50"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-              <textarea
-                className={`${taBase} h-[32rem]`}
-                value={improvements}
-                onChange={(e) => {
-                  setImprovements(e.target.value);
-                  setImproveDirty(true);
-                  scheduleSave("improvements", e.target.value);
-                }}
-              />
-            </div>
-          )}
-
-          {activeTab === "cover" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Cover Letter</h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">{coverLetter.length.toLocaleString()} chars</span>
-                  <button
-                    onClick={() => {
-                      copyToClipboard(coverLetter);
-                    }}
-                    disabled={isDisabled(coverLetter)}
-                    className="px-3 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm disabled:opacity-50"
-                  >
-                    Copy
-                  </button>
-                  <button
-                    onClick={() => downloadDocx("Cover Letter", coverLetter)}
-                    disabled={isDisabled(coverLetter)}
-                    className="px-3 py-2 rounded-xl bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 hover:bg-black dark:hover:bg-white text-sm disabled:opacity-50"
-                  >
-                    Download DOCX
-                  </button>
-                </div>
-              </div>
-              <textarea
-                className={`${taBase} h-[26rem]`}
-                value={coverLetter}
-                onChange={(e) => {
-                  setCoverLetter(e.target.value);
-                  setCoverDirty(true);
-                  scheduleSave("coverLetter", e.target.value);
-                }}
-              />
-            </div>
-          )}
-
-          {activeTab === "quiz" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Interview Questions</h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleGenerateMoreQuiz}
-                    disabled={loadingMoreQuiz}
-                    className="px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50 inline-flex items-center"
-                  >
-                    {loadingMoreQuiz && <Spinner />}
-                    {loadingMoreQuiz ? "Generating…" : "Generate More (Replace)"}
-                  </button>
-                </div>
-              </div>
-
-              {quiz.length === 0 ? (
-                <p className="text-gray-600 dark:text-gray-400">No questions yet. Click “Generate More (Replace)”.</p>
-              ) : (
-                <>
-                  <div className="flex items-baseline justify-between text-sm text-gray-600 dark:text-gray-400">
-                    <span>
-                      Question {quizIdx + 1} of {quiz.length}
-                    </span>
-                  </div>
-                  <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-900">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{quiz[quizIdx].question}</p>
-                    {showAnswer && (
-                      <p className="mt-3 text-gray-800 dark:text-gray-200 leading-relaxed">
-                        <span className="font-semibold">Ideal answer: </span>
-                        {quiz[quizIdx].idealAnswer}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowAnswer((s) => !s)}
-                      className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]"
-                    >
-                      {showAnswer ? "Hide Answer" : "Show Answer"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAnswer(false);
-                        setQuizIdx((i) => (i + 1 < quiz.length ? i + 1 : 0));
-                      }}
-                      className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+      {/* Title */}
+      <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
+        <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+          {title}
+        </h1>
+        <p className="mt-2 text-gray-600 dark:text-gray-400">
+          Tailored improvements, a cover letter, and interview practice based on your target role.
+        </p>
       </div>
 
-      {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
+      {/* Tabs */}
+      <main className="flex-1">
+        <div className="mx-auto max-w-4xl px-6">
+          <div className="mx-auto mb-6 flex w-full items-center justify-center">
+            <div className="inline-flex rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-1 shadow-sm">
+              {[
+                { id: "improve", label: "Resume Improvements" },
+                { id: "cover", label: "Cover Letter" },
+                { id: "quiz", label: "Interview Qs" },
+              ].map((t) => {
+                const isActive = active === (t.id as any);
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setActive(t.id as any)}
+                    className={[
+                      "px-4 py-2 text-sm rounded-xl transition-colors",
+                      isActive
+                        ? "text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800",
+                    ].join(" ")}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Panels */}
+          <section className="space-y-6">
+            {/* Improvements */}
+            {active === "improve" && (
+              <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    What to improve for this job — <span className="font-semibold">in your resume</span>
+                  </h2>
+                  <button
+                    onClick={() => copy(data.improvements)}
+                    className="text-sm rounded-lg px-3 py-1.5 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <Article text={data.improvements} />
+                <Disclosure title="Job description (reference)">
+                  <pre className="whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300">{data.jobDescription}</pre>
+                </Disclosure>
+              </div>
+            )}
+
+            {/* Cover Letter */}
+            {active === "cover" && (
+              <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Cover Letter draft</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => copy(data.coverLetter)}
+                      className="text-sm rounded-lg px-3 py-1.5 border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <Article text={data.coverLetter} />
+              </div>
+            )}
+
+            {/* Interview Questions */}
+            {active === "quiz" && (
+              <div className="bg-white dark:bg-gray-950 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-lg p-6 md:p-8">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Interview practice</h2>
+                  <button
+                    onClick={regenerateQuestions}
+                    disabled={regen}
+                    className="text-sm rounded-lg px-3 py-1.5 text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {regen ? <span className="inline-flex items-center"><Spinner />Generating…</span> : "Generate more"}
+                  </button>
+                </div>
+                {data.quizItems?.length ? (
+                  <ol className="space-y-4 list-decimal pl-5">
+                    {data.quizItems.map((q, i) => (
+                      <li key={i} className="text-gray-900 dark:text-gray-100">
+                        <div className="font-medium">{q.question}</div>
+                        {q.answer && (
+                          <div className="mt-1 text-sm text-gray-700 dark:text-gray-300">
+                            <span className="px-2 py-0.5 rounded-lg bg-gray-100 dark:bg-gray-800 mr-1">Tip</span>
+                            {q.answer}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p className="text-gray-600 dark:text-gray-400">No questions yet.</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          <div className="h-12" />
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
+        <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
+          <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
+            © {new Date().getFullYear()} Job PowerUp. All rights reserved.
+          </div>
+          <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
+            <a href="/privacy" className="hover:underline">Privacy</a>
+            <a href="/terms" className="hover:underline">Terms</a>
+            <a href="/contact" className="hover:underline">Contact</a>
+          </nav>
+        </div>
+      </footer>
+    </div>
+  );
+}
+
+/** Simple readable article block that respects line breaks/bullets */
+function Article({ text }: { text: string }) {
+  if (!text?.trim()) return <p className="text-gray-600 dark:text-gray-400">No content.</p>;
+  return (
+    <div className="prose dark:prose-invert max-w-none">
+      <pre className="whitespace-pre-wrap font-sans leading-relaxed text-gray-900 dark:text-gray-100">{text}</pre>
+    </div>
+  );
+}
+
+/** Minimal disclosure/accordion */
+function Disclosure({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-6 border-t border-gray-200 dark:border-gray-800 pt-4">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="text-sm inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800"
+      >
+        {open ? "Hide" : "Show"} {title}
+      </button>
+      {open && <div className="mt-3">{children}</div>}
     </div>
   );
 }
