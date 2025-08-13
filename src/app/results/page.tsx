@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import Header from "@/components/Header";
 
 /* ============================
    Small helpers (formatting)
@@ -366,7 +365,6 @@ export default function ResultsPage() {
   if (!improvements && !coverLetter && !quiz.length) {
     return (
       <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-        <Header showAuth={false} />
         <main className="flex-1 grid place-items-center">
           <div className="text-center px-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">No results yet</h1>
@@ -380,8 +378,6 @@ export default function ResultsPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <Header showAuth={false} />
-
       {/* CENTERED title/desc/download */}
       <div className="mx-auto max-w-4xl px-6 pt-10 pb-4 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
