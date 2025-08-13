@@ -174,7 +174,7 @@ function AssistantBubble({
         </>
       )}
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 w=[min(90vw,380px)] w-[min(90vw,380px)] rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-2xl overflow-hidden">
+        <div className="fixed bottom-6 right-6 z-50 w-[min(90vw,380px)] rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gradient-to-r from-indigo-600 via-violet-600 to-emerald-600 text-white">
             <div className="font-semibold">Job PowerUp Bot</div>
             <button onClick={() => setOpen(false)} className="opacity-90 hover:opacity-100">✕</button>
@@ -257,7 +257,7 @@ export default function ResultsPage() {
   const [loadingMoreQuiz, setLoadingMoreQuiz] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [resumeFilename, setResumeFilename] = useState("");
-  the [resumeText, setResumeText] = useState<string>("");
+  const [resumeText, setResumeText] = useState<string>("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [jobDescriptionChars, setJobDescriptionChars] = useState(0);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
