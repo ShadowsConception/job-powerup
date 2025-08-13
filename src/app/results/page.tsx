@@ -1,617 +1,298 @@
-"use client";
+'use client';
 
-import React, { useEffect, useRef, useState } from "react";
-import BuildStamp from "../../components/BuildStamp";
+import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-export const dynamic = "force-dynamic";
+type Inputs = {
+  resumeText: string;
+  jobLink: string;
+  jobDescription: string;
+};
 
-type QuizItem = { question: string; idealAnswer: string };
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type AnalyzeOut = {
+  summary: string;
+  improvements: string; // “What to improve in your resume for this job”
+  tailoredBullets?: string;
+};
 
-function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
-  return (
-    <svg className={`animate-spin ${className}`} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-    </svg>
-  );
-}
+type CoverLetterOut = { coverLetter: string };
 
-function Toast({ message, onClose }: { message: string; onClose: () => void }) {
-  useEffect(() => {
-    const t = setTimeout(onClose, 3200);
-    return () => clearTimeout(t);
-  }, [onClose]);
-  return (
-    <div className="fixed bottom-6 right-6 z-50">
-      <div className="rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">{message}</div>
-    </div>
-  );
+type QuizItem = { question: string; answer: string };
+type QuizOut = { questions: QuizItem[] };
+
+async function postJSON<T>(url: string, body: any): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${url} ${res.status}`);
+  return res.json();
 }
 
 export default function ResultsPage() {
-  // Tabs
-  const [activeTab, setActiveTab] = useState<"improve" | "cover" | "quiz">("improve");
+  const router = useRouter();
+  const [inputs, setInputs] = useState<Inputs | null>(null);
 
-  // Data
-  const [improvements, setImprovements] = useState("");
-  const [coverLetter, setCoverLetter] = useState("");
-  const [quiz, setQuiz] = useState<QuizItem[]>([]);
-  const [quizIdx, setQuizIdx] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
+  // outputs + loading/error states
+  const [analyze, setAnalyze] = useState<AnalyzeOut | null>(null);
+  const [analyzeErr, setAnalyzeErr] = useState<string | null>(null);
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
 
-  const [resumeFilename, setResumeFilename] = useState("");
-  const [jobDescriptionChars, setJobDescriptionChars] = useState(0);
-  const [jobTitle, setJobTitle] = useState<string | null>(null);
+  const [letter, setLetter] = useState<CoverLetterOut | null>(null);
+  const [letterErr, setLetterErr] = useState<string | null>(null);
+  const [letterLoading, setLetterLoading] = useState(false);
 
-  // Chat
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [showTip, setShowTip] = useState(false);
+  const [quiz, setQuiz] = useState<QuizOut | null>(null);
+  const [quizErr, setQuizErr] = useState<string | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
 
-  // UI
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [activeTab, setActiveTab] = useState<'analyze' | 'letter' | 'quiz'>('analyze');
 
   useEffect(() => {
-    // Load results payload
+    // safe read after mount
     try {
-      const raw = sessionStorage.getItem("jp_results");
+      const raw = sessionStorage.getItem('jp_inputs');
       if (raw) {
-        const parsed = JSON.parse(raw);
-        setImprovements(parsed.improvements || "");
-        setCoverLetter(parsed.coverLetter || "");
-        setQuiz(Array.isArray(parsed.quizItems) ? parsed.quizItems : []);
-        setResumeFilename(parsed.resumeFilename || "");
-        setJobDescriptionChars((parsed.jobDescription || "").length || 0);
+        const parsed = JSON.parse(raw) as Inputs;
+        setInputs(parsed);
+      } else {
+        setInputs(null);
       }
-    } catch {}
-    // Toast
-    const toast = sessionStorage.getItem("jp_toast");
-    if (toast) {
-      setToastMsg(toast);
-      sessionStorage.removeItem("jp_toast");
+    } catch {
+      setInputs(null);
     }
-    // Title
-    const t = sessionStorage.getItem("jp_import_title");
-    if (t && t.trim()) setJobTitle(t.trim());
-
-    // Chat history + one-time tip
-    try {
-      const rawMsgs = sessionStorage.getItem("jp_chat_msgs");
-      if (rawMsgs) {
-        const parsed = JSON.parse(rawMsgs) as ChatMessage[];
-        if (Array.isArray(parsed)) {
-          setMessages(parsed.filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string"));
-        }
-      }
-    } catch {}
-    const tipSeen = localStorage.getItem("jp_chat_tip_seen");
-    if (!tipSeen) setShowTip(true);
   }, []);
 
   useEffect(() => {
-    if (panelRef.current) panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    else if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [activeTab]);
+    if (!inputs) return;
+    // kick off all three in parallel
+    (async () => {
+      setAnalyzeLoading(true);
+      setLetterLoading(true);
+      setQuizLoading(true);
+      try {
+        const [a, l, q] = await Promise.allSettled([
+          postJSON<AnalyzeOut>('/api/analyze', inputs),
+          postJSON<CoverLetterOut>('/api/cover-letter', inputs),
+          postJSON<QuizOut>('/api/interview-quiz', inputs),
+        ]);
 
-  // Rich text renderer — supports **bold**, bullets, and headings
-  function withBold(text: string) {
-    const parts = text.split("**");
-    return parts.map((chunk, i) =>
-      i % 2 === 1 ? (
-        <strong key={i}>{chunk}</strong>
-      ) : (
-        <React.Fragment key={i}>{chunk}</React.Fragment>
-      )
-    );
-  }
-  function renderRichText(md: string) {
-    if (!md?.trim()) return null;
-    const blocks = md.replace(/\r\n/g, "\n").replace(/\u00A0/g, " ").trim().split(/\n{2,}/);
-    return blocks.map((block, idx) => {
-      const lines = block.split("\n").filter(Boolean);
-      const isBullets = lines.length > 1 && lines.every((l) => /^(\-|\*|•)\s+/.test(l));
-      if (isBullets) {
-        return (
-          <ul key={idx} className="list-disc pl-6 space-y-1">
-            {lines.map((l, li) => (
-              <li key={li} className="leading-relaxed">
-                {withBold(l.replace(/^(\-|\*|•)\s+/, ""))}
-              </li>
-            ))}
-          </ul>
-        );
-      }
-      if (/^##\s+/.test(block)) {
-        return (
-          <h3 key={idx} className="font-semibold text-lg mt-3">
-            {block.replace(/^##\s+/, "")}
-          </h3>
-        );
-      }
-      if (/^#\s+/.test(block)) {
-        return (
-          <h2 key={idx} className="font-bold text-xl mt-3">
-            {block.replace(/^#\s+/, "")}
-          </h2>
-        );
-      }
-      return (
-        <p key={idx} className="leading-relaxed">
-          {withBold(lines.join(" "))}
-        </p>
-      );
-    });
-  }
+        if (a.status === 'fulfilled') setAnalyze(a.value);
+        else setAnalyzeErr(a.reason?.message || 'Analyze failed');
 
-  async function copyToClipboard(text: string) {
+        if (l.status === 'fulfilled') setLetter(l.value);
+        else setLetterErr(l.reason?.message || 'Cover letter failed');
+
+        if (q.status === 'fulfilled') setQuiz(q.value);
+        else setQuizErr(q.reason?.message || 'Quiz failed');
+      } finally {
+        setAnalyzeLoading(false);
+        setLetterLoading(false);
+        setQuizLoading(false);
+      }
+    })();
+  }, [inputs]);
+
+  const resumeChars = useMemo(() => inputs?.resumeText?.length ?? 0, [inputs]);
+
+  const backToEdit = () => {
+    router.push('/');
+  };
+
+  const regenerateQuiz = async () => {
+    if (!inputs) return;
+    setQuizLoading(true);
+    setQuizErr(null);
     try {
-      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
-      else {
-        const ta = document.createElement("textarea");
-        ta.value = text;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-      setToastMsg("Copied to clipboard 👍");
-    } catch {
-      alert("Couldn’t copy to clipboard.");
+      const fresh = await postJSON<QuizOut>('/api/interview-quiz', inputs);
+      setQuiz(fresh);
+    } catch (e: any) {
+      setQuizErr(e?.message || 'Could not generate more questions');
+    } finally {
+      setQuizLoading(false);
     }
-  }
+  };
 
-  async function downloadDocx(title: string, body: string) {
+  const downloadDocx = async () => {
     try {
-      const res = await fetch("/api/export-docx", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, sections: [{ heading: title, body }] }),
+      const payload = {
+        analyze,
+        letter,
+        quiz,
+        inputs,
+      };
+      const res = await fetch('/api/export-docx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("docx export failed");
+      if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
-      a.download = `${title.replace(/\s+/g, "_").toLowerCase()}.docx`;
+      a.download = 'job-powerup.docx';
+      document.body.appendChild(a);
       a.click();
+      a.remove();
       URL.revokeObjectURL(url);
-      setToastMsg("DOCX downloaded ✅");
     } catch (e) {
-      console.error(e);
-      alert("DOCX export failed.");
+      alert('DOCX export is not configured on this deployment.');
     }
+  };
+
+  if (inputs === null) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-[#0b0e14] text-white">
+        <div className="text-center">
+          <div className="text-2xl font-semibold mb-2">No inputs found</div>
+          <button
+            onClick={() => router.push('/')}
+            className="px-5 py-2 rounded-xl bg-white text-black font-semibold"
+          >
+            Back to edit
+          </button>
+        </div>
+      </div>
+    );
   }
-
-  // Chat send (assistant sees resume + job description)
-  async function handleSend() {
-    const text = input.trim();
-    if (!text) return;
-
-    const nextMsgs: ChatMessage[] = [...messages, { role: "user", content: text }];
-    setMessages(nextMsgs);
-    setInput("");
-
-    try {
-      setBusy(true);
-
-      let jobDescription = "";
-      let resumeText = sessionStorage.getItem("jp_resume_text") || "";
-      const rawResults = sessionStorage.getItem("jp_results");
-      if (rawResults) {
-        try {
-          jobDescription = JSON.parse(rawResults)?.jobDescription || "";
-        } catch {}
-      }
-
-      const res = await fetch("/api/assistant-chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: nextMsgs,
-          jobDescription,
-          resumeText,
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      const ai = String(data?.reply || "Sorry—no reply received.");
-      const finalMsgs: ChatMessage[] = [...nextMsgs, { role: "assistant", content: ai }];
-      setMessages(finalMsgs);
-      sessionStorage.setItem("jp_chat_msgs", JSON.stringify(finalMsgs));
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            "Sorry—something went wrong. Try again. I’ll be honest but kind, and keep resume formatting clean.",
-        },
-      ]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  // UI styles
-  const btnTab =
-    "px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white/80 backdrop-blur dark:bg-gray-900/80 text-gray-900 dark:text-gray-100 hover:bg-white dark:hover:bg-gray-800 active:scale-[.99] text-sm md:text-base";
-  const card =
-    "bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl rounded-2xl shadow p-5 md:p-6 border border-white/40 dark:border-white/10";
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(80rem_50rem_at_0%_-10%,rgba(99,102,241,0.18),transparent),radial-gradient(90rem_50rem_at_100%_10%,rgba(236,72,153,0.16),transparent)] dark:bg-[radial-gradient(80rem_50rem_at_0%_-10%,rgba(99,102,241,0.16),transparent),radial-gradient(90rem_50rem_at_100%_10%,rgba(236,72,153,0.14),transparent)]">
-      {/* Transparent header */}
-      <header className="sticky top-0 z-40 bg-white/60 dark:bg-gray-950/40 backdrop-blur-md border-b border-white/40 dark:border-white/10">
-        <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between gap-4">
-          {/* Brand LEFT */}
-          <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-            Job PowerUp
-          </a>
-          {/* Auth RIGHT — white text */}
-          <div className="flex items-center gap-2">
-            <a
-              href="/login"
-              className="rounded-xl px-3 py-1.5 text-sm text-white bg-cyan-600 hover:bg-cyan-700"
-            >
-              Log in
-            </a>
-            <a
-              href="/signup"
-              className="rounded-xl px-3 py-1.5 text-sm text-white bg-indigo-600 hover:bg-indigo-700"
-            >
-              Sign up
-            </a>
+    <div className="min-h-screen bg-[radial-gradient(1200px_600px_at_50%_-10%,rgba(59,130,246,0.18),transparent),radial-gradient(800px_400px_at_10%_10%,rgba(34,197,94,0.15),transparent),#0b0e14] text-white">
+      {/* Header */}
+      <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-2xl bg-gradient-to-br from-emerald-400 via-cyan-400 to-indigo-400 grid place-items-center shadow-md">
+            <svg width="18" height="18" viewBox="0 0 24 24" className="fill-white">
+              <path d="M2 5a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H9l-5 5v-5H5a3 3 0 0 1-3-3V5z" />
+            </svg>
           </div>
+          <span className="text-xl font-semibold text-white">Job PowerUp</span>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-        {/* Centered header block */}
-        <section className="text-center">
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
-            Your Results{jobTitle ? ` — ${jobTitle}` : ""}
-          </h1>
-          <div className="mt-2 text-sm md:text-base text-gray-600 dark:text-gray-400">
-            {jobTitle ? `Job: ${jobTitle}` : "Switch tabs to view each artifact."}{" "}
-            <span className="text-gray-400 dark:text-gray-500">
-              {`Job description chars: ${jobDescriptionChars.toLocaleString()}`}
-            </span>
-            {resumeFilename && (
-              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Source resume: {resumeFilename}
-              </span>
-            )}
-          </div>
-
-          {/* Download both */}
-          <div className="mt-4 flex items-center justify-center gap-3">
-            <button
-              onClick={() => downloadDocx("Resume Improvements", improvements)}
-              disabled={!improvements.trim()}
-              className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              Download Improvements DOCX
-            </button>
-            <button
-              onClick={() => downloadDocx("Cover Letter", coverLetter)}
-              disabled={!coverLetter.trim()}
-              className="px-4 py-2 rounded-xl bg-fuchsia-600 text-white hover:bg-fuchsia-700 disabled:opacity-50"
-            >
-              Download Cover Letter DOCX
-            </button>
-          </div>
-        </section>
-
-        {/* Tabs */}
-        <div className="flex gap-2 justify-center">
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveTab("improve")}
-            className={`${btnTab} ${
-              activeTab === "improve"
-                ? "border-indigo-300 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40"
-                : ""
-            }`}
+            onClick={backToEdit}
+            className="px-4 py-2 rounded-xl bg-white text-black font-semibold hover:opacity-90"
           >
-            How to improve your resume
+            Back to edit
           </button>
           <button
-            onClick={() => setActiveTab("cover")}
-            className={`${btnTab} ${
-              activeTab === "cover"
-                ? "border-fuchsia-300 dark:border-fuchsia-800 bg-fuchsia-50/70 dark:bg-fuchsia-950/40"
-                : ""
+            onClick={downloadDocx}
+            className="px-4 py-2 rounded-xl border border-white/20 hover:bg-white/10"
+          >
+            Download DOCX
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="mx-auto max-w-6xl px-4">
+        <div className="mt-2 rounded-2xl bg-white/5 border border-white/10 p-2 flex gap-2">
+          <button
+            onClick={() => setActiveTab('analyze')}
+            className={`px-4 py-2 rounded-xl ${
+              activeTab === 'analyze' ? 'bg-white text-black font-semibold' : 'hover:bg-white/10'
+            }`}
+          >
+            Resume Powerups
+          </button>
+          <button
+            onClick={() => setActiveTab('letter')}
+            className={`px-4 py-2 rounded-xl ${
+              activeTab === 'letter' ? 'bg-white text-black font-semibold' : 'hover:bg-white/10'
             }`}
           >
             Cover Letter
           </button>
           <button
-            onClick={() => setActiveTab("quiz")}
-            className={`${btnTab} ${
-              activeTab === "quiz"
-                ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30"
-                : ""
+            onClick={() => setActiveTab('quiz')}
+            className={`px-4 py-2 rounded-xl ${
+              activeTab === 'quiz' ? 'bg-white text-black font-semibold' : 'hover:bg-white/10'
             }`}
           >
-            Interview Questions
+            Interview Q&A
           </button>
         </div>
 
         {/* Panels */}
-        <section ref={panelRef} className={card}>
-          {activeTab === "improve" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  How to improve your resume
-                </h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {improvements.length.toLocaleString()} chars
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(improvements)}
-                    disabled={!improvements.trim()}
-                    className="px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-black text-sm"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-              <div className="prose prose-gray max-w-none dark:prose-invert prose-p:leading-relaxed prose-li:leading-relaxed">
-                {renderRichText(improvements)}
-              </div>
-            </div>
-          )}
-
-          {activeTab === "cover" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Cover Letter</h2>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {coverLetter.length.toLocaleString()} chars
-                  </span>
-                  <button
-                    onClick={() => copyToClipboard(coverLetter)}
-                    disabled={!coverLetter.trim()}
-                    className="px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-black text-sm"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3 leading-relaxed">
-                {renderRichText(coverLetter)}
-              </div>
-            </div>
-          )}
-
-          {activeTab === "quiz" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  Interview Questions
-                </h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={async () => {
-                      const raw = sessionStorage.getItem("jp_results");
-                      let jobDescription = "";
-                      if (raw) {
-                        try {
-                          jobDescription = JSON.parse(raw)?.jobDescription || "";
-                        } catch {}
-                      }
-                      if (!jobDescription.trim()) {
-                        alert("Missing job description. Go back and generate again.");
-                        return;
-                      }
-                      try {
-                        const res = await fetch("/api/interview-quiz", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ jobDescription, count: 10 }),
-                        });
-                        const data = await res.json();
-                        const items: QuizItem[] = Array.isArray(data.items) ? data.items : [];
-                        setQuiz(items);
-                        setQuizIdx(0);
-                        setShowAnswer(false);
-                        setToastMsg("New questions generated 🔄");
-                      } catch (e: any) {
-                        console.error(e);
-                        alert(`Failed to generate questions: ${e.message || e}`);
-                      }
-                    }}
-                    className="px-3 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 text-sm disabled:opacity-50 inline-flex items-center"
-                  >
-                    Generate More (Replace)
-                  </button>
-                </div>
-              </div>
-
-              {quiz.length === 0 ? (
-                <p className="text-gray-600 dark:text-gray-400">
-                  No questions yet. Click “Generate More (Replace)”.
-                </p>
-              ) : (
-                <>
-                  <div className="flex items-baseline justify-between text-sm text-gray-600 dark:text-gray-400">
-                    <span>
-                      Question {quizIdx + 1} of {quiz.length}
-                    </span>
+        <div className="mt-4">
+          {activeTab === 'analyze' && (
+            <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur p-5">
+              {analyzeLoading && <div className="animate-pulse">Generating tailored resume guidance…</div>}
+              {analyzeErr && <div className="text-red-300">Error: {analyzeErr}</div>}
+              {analyze && (
+                <div className="space-y-6">
+                  <section>
+                    <h3 className="text-lg font-semibold">Summary</h3>
+                    <p className="mt-1 whitespace-pre-wrap text-white/90">{analyze.summary}</p>
+                  </section>
+                  <section>
+                    <h3 className="text-lg font-semibold">What to improve in your resume for this job</h3>
+                    <p className="mt-1 whitespace-pre-wrap text-white/90">{analyze.improvements}</p>
+                  </section>
+                  {analyze.tailoredBullets && (
+                    <section>
+                      <h3 className="text-lg font-semibold">Tailored bullet points</h3>
+                      <p className="mt-1 whitespace-pre-wrap text-white/90">{analyze.tailoredBullets}</p>
+                    </section>
+                  )}
+                  <div className="text-xs text-white/60">
+                    Source resume length: {resumeChars.toLocaleString()} characters
                   </div>
-                  <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-900">
-                    <p className="font-medium text-gray-900 dark:text-gray-100">{quiz[quizIdx].question}</p>
-                    {showAnswer && (
-                      <p className="mt-3 text-gray-800 dark:text-gray-200 leading-relaxed">
-                        <span className="font-semibold">Ideal answer: </span>
-                        {quiz[quizIdx].idealAnswer}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowAnswer((s) => !s)}
-                      className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]"
-                    >
-                      {showAnswer ? "Hide Answer" : "Show Answer"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAnswer(false);
-                        setQuizIdx((i) => (i + 1 < quiz.length ? i + 1 : 0));
-                      }}
-                      className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 active:scale-[.99]"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </>
+                </div>
               )}
             </div>
           )}
-        </section>
-      </main>
 
-      {/* Bottom-right cluster: Chat bubble + Theme toggle together */}
-      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
-        <button
-          onClick={() => {
-            setChatOpen((v) => !v);
-            if (!localStorage.getItem("jp_chat_tip_seen")) {
-              localStorage.setItem("jp_chat_tip_seen", "1");
-              setShowTip(false);
-            }
-          }}
-          className="rounded-full p-3 shadow-lg bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white hover:from-indigo-700 hover:to-fuchsia-700"
-          aria-label="Chat with Job PowerUp"
-          title="Chat with Job PowerUp"
-        >
-          💬
-        </button>
-        {/* Theme pebble NEXT to chat bubble */}
-        <ThemePebble />
+          {activeTab === 'letter' && (
+            <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur p-5">
+              {letterLoading && <div className="animate-pulse">Drafting cover letter…</div>}
+              {letterErr && <div className="text-red-300">Error: {letterErr}</div>}
+              {letter && (
+                <textarea
+                  defaultValue={letter.coverLetter}
+                  className="w-full h-[60vh] rounded-2xl bg-black/40 border border-white/10 p-3 outline-none"
+                />
+              )}
+            </div>
+          )}
+
+          {activeTab === 'quiz' && (
+            <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Interview practice</h3>
+                <button
+                  onClick={regenerateQuiz}
+                  disabled={quizLoading}
+                  className="px-4 py-2 rounded-xl bg-white text-black font-semibold hover:opacity-90 disabled:opacity-50"
+                >
+                  {quizLoading ? 'Generating…' : 'Generate more'}
+                </button>
+              </div>
+              {quizErr && <div className="text-red-300 mt-2">Error: {quizErr}</div>}
+              {!quiz && quizLoading && <div className="mt-2 animate-pulse">Loading questions…</div>}
+              {quiz && (
+                <ol className="mt-4 space-y-4 list-decimal pl-5">
+                  {quiz.questions.map((q, i) => (
+                    <li key={i} className="space-y-2">
+                      <div className="font-medium">{q.question}</div>
+                      <div className="text-white/90 whitespace-pre-wrap">{q.answer}</div>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
-      {showTip && !chatOpen && (
-        <div className="fixed bottom-[5.5rem] right-6 z-40 rounded-xl bg-gray-900 text-white text-sm px-3 py-2 shadow">
-          Chat with Job PowerUp →
-        </div>
-      )}
-
-      {/* Chat panel */}
-      {chatOpen && (
-        <div className="fixed bottom-24 right-6 z-40 w-[min(92vw,28rem)] max-h-[70vh] rounded-2xl border border-white/40 dark:border-white/10 bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl shadow-xl flex flex-col">
-          <div className="px-4 py-3 border-b border-white/40 dark:border-white/10 flex items-center justify-between">
-            <div className="font-semibold">Job PowerUp Bot</div>
-            <button onClick={() => setChatOpen(false)} className="text-sm text-gray-500 hover:text-gray-900 dark:hover:text-gray-100">
-              ✕
-            </button>
-          </div>
-          <div className="p-3 overflow-y-auto flex-1 space-y-3">
-            {messages.length === 0 ? (
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Ask anything about your resume or the job—I'll be honest, kind, and format answers cleanly.
-              </div>
-            ) : null}
-            {messages.map((m, i) => (
-              <div
-                key={i}
-                className={`rounded-xl px-3 py-2 text-sm leading-relaxed ${
-                  m.role === "user"
-                    ? "bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 ml-12"
-                    : "bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 mr-12"
-                }`}
-              >
-                {renderRichText(m.content)}
-              </div>
-            ))}
-            {busy && (
-              <div className="rounded-xl px-3 py-2 text-sm bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 mr-12 inline-flex items-center gap-2">
-                <span className="inline-flex gap-1">
-                  <span className="w-2 h-2 rounded-full bg-gray-500 animate-bounce [animation-delay:-0.2s]" />
-                  <span className="w-2 h-2 rounded-full bg-gray-500 animate-bounce" />
-                  <span className="w-2 h-2 rounded-full bg-gray-500 animate-bounce [animation-delay:0.2s]" />
-                </span>
-                thinking…
-              </div>
-            )}
-          </div>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="p-3 border-t border-white/40 dark:border-white/10 flex items-center gap-2"
-          >
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-              placeholder="Ask for feedback or edits…"
-              className="flex-1 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button
-              type="submit"
-              disabled={busy || !input.trim()}
-              className="rounded-xl px-3 py-2 bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50 inline-flex items-center"
-            >
-              {busy ? <Spinner /> : null}
-              {busy ? "Sending…" : "Send"}
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* Footer */}
-      <footer className="bg-white/60 dark:bg-gray-950/50 backdrop-blur border-t border-white/40 dark:border-white/10 py-6 mt-10">
-        <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
-          <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
-            © {new Date().getFullYear()} Job PowerUp. All rights reserved. <BuildStamp className="ml-2" />
-          </div>
-          <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
-            <a href="/privacy" className="hover:underline">Privacy</a>
-            <a href="/terms" className="hover:underline">Terms</a>
-            <a href="/contact" className="hover:underline">Contact</a>
-          </nav>
+      <footer className="py-6">
+        <div className="mx-auto max-w-6xl px-4">
+          <div className="text-center text-[11px] text-white/60">Job PowerUp • results</div>
         </div>
       </footer>
     </div>
-  );
-}
-
-/** Bottom-right theme pebble (kept local so it's “next to” chat) */
-function ThemePebble() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="rounded-full px-3 py-2 bg-gray-900 text-white hover:bg-black"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙" : "☀️"}
-    </button>
   );
 }
