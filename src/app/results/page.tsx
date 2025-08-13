@@ -34,11 +34,12 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
     </div>
   );
 }
+
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 const normalize = (s: string) => s.replace(/\r\n/g, "\n").replace(/\u00A0/g, " ").trim();
 
-/** Minimal markdown -> HTML for bold, italics, headings, lists, and paragraphs */
+/** Minimal markdown -> HTML for bold, italics, headings, lists, and paragraphs (for Improvements tab) */
 function renderBasicMarkdown(md: string) {
   let html = escapeHtml(normalize(md));
   html = html.replace(/^##\s+(.+)$/gm, "<h3 class='mt-4 mb-2 font-semibold'>$1</h3>");
@@ -51,7 +52,7 @@ function renderBasicMarkdown(md: string) {
   return `<p>${html}</p>`;
 }
 
-/** Clean up cover letter text: remove stray quotes, normalize spacing. */
+/** Cover letter cleanup: keep paragraphs, remove stray quotes/bullets, normalize spacing. */
 function formatCoverLetter(raw: string) {
   let s = normalize(raw);
   if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("“") && s.endsWith("”"))) s = s.slice(1, -1).trim();
@@ -490,11 +491,12 @@ export default function ResultsPage() {
                     </button>
                   </div>
                 </div>
+
+                {/* IMPORTANT: preserve line breaks like the DOCX */}
                 <div className="leading-7 text-gray-900 dark:text-gray-100">
-                  <div
-                    className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950"
-                    dangerouslySetInnerHTML={{ __html: renderBasicMarkdown(formatCoverLetter(coverLetter)) }}
-                  />
+                  <div className="rounded-xl border border-gray-200 dark:border-gray-800 p-5 bg-white dark:bg-gray-950 whitespace-pre-line">
+                    {formatCoverLetter(coverLetter)}
+                  </div>
                 </div>
               </div>
             )}
@@ -592,7 +594,7 @@ export default function ResultsPage() {
         </button>
       )}
 
-      {/* Chat bubble (toggle handled globally via layout) */}
+      {/* Chat bubble */}
       <AssistantBubble
         context={{
           improvements,

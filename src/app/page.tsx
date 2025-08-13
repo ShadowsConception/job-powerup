@@ -115,7 +115,8 @@ export default function LandingPage() {
     try {
       const fdAnalyze = new FormData(); fdAnalyze.append("file", file); fdAnalyze.append("jobDescription", jobDescription);
       const fdCover = new FormData(); fdCover.append("file", file); fdCover.append("jobDescription", jobDescription);
-
+      const rt = sessionStorage.getItem("jp_resume_text") || "";
+      if (rt) fdCover.append("resumeText", rt);
       const analyzePromise = fetch("/api/analyze", { method: "POST", body: fdAnalyze })
         .then((r) => r.json()).then((d) => { setProgress(45); setStatus("Analyzing Resume vs job…"); return d; });
 
