@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import BuildStamp from "../../components/BuildStamp";
 
-export const dynamic = "force-dynamic"; // avoid stale caching
+export const dynamic = "force-dynamic";
 
 type QuizItem = { question: string; idealAnswer: string };
 type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -26,31 +26,6 @@ function Toast({ message, onClose }: { message: string; onClose: () => void }) {
     <div className="fixed bottom-6 right-6 z-50">
       <div className="rounded-xl bg-gray-900 text-white px-4 py-3 shadow-lg">{message}</div>
     </div>
-  );
-}
-
-function ThemePebble() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="fixed bottom-6 left-6 z-40 rounded-full px-3 py-2 bg-gray-900 text-white hover:bg-black"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙" : "☀️"}
-    </button>
   );
 }
 
@@ -93,30 +68,23 @@ export default function ResultsPage() {
         setJobDescriptionChars((parsed.jobDescription || "").length || 0);
       }
     } catch {}
-    // Toast from previous page
+    // Toast
     const toast = sessionStorage.getItem("jp_toast");
     if (toast) {
       setToastMsg(toast);
       sessionStorage.removeItem("jp_toast");
     }
-    // Imported title if available
+    // Title
     const t = sessionStorage.getItem("jp_import_title");
     if (t && t.trim()) setJobTitle(t.trim());
 
-    // Chat history + one-time “tip” bubble
+    // Chat history + one-time tip
     try {
       const rawMsgs = sessionStorage.getItem("jp_chat_msgs");
       if (rawMsgs) {
         const parsed = JSON.parse(rawMsgs) as ChatMessage[];
         if (Array.isArray(parsed)) {
-          setMessages(
-            parsed.filter(
-              (m) =>
-                m &&
-                (m.role === "user" || m.role === "assistant") &&
-                typeof m.content === "string"
-            )
-          );
+          setMessages(parsed.filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string"));
         }
       }
     } catch {}
@@ -129,7 +97,7 @@ export default function ResultsPage() {
     else if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }, [activeTab]);
 
-  // Formatting helpers (render readable cards instead of gray textareas)
+  // Rich text renderer — supports **bold**, bullets, and headings
   function withBold(text: string) {
     const parts = text.split("**");
     return parts.map((chunk, i) =>
@@ -157,7 +125,6 @@ export default function ResultsPage() {
           </ul>
         );
       }
-      // Headings
       if (/^##\s+/.test(block)) {
         return (
           <h3 key={idx} className="font-semibold text-lg mt-3">
@@ -219,22 +186,21 @@ export default function ResultsPage() {
     }
   }
 
-  // Chat send
+  // Chat send (assistant sees resume + job description)
   async function handleSend() {
     const text = input.trim();
     if (!text) return;
 
-    const nextMsgs: ChatMessage[] = [...messages, { role: "user" as const, content: text }];
+    const nextMsgs: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(nextMsgs);
     setInput("");
 
     try {
       setBusy(true);
 
-      // context for the assistant
-      const rawResults = sessionStorage.getItem("jp_results");
       let jobDescription = "";
       let resumeText = sessionStorage.getItem("jp_resume_text") || "";
+      const rawResults = sessionStorage.getItem("jp_results");
       if (rawResults) {
         try {
           jobDescription = JSON.parse(rawResults)?.jobDescription || "";
@@ -245,18 +211,18 @@ export default function ResultsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messages: nextMsgs, // [{role:'user'|'assistant', content}]
+          messages: nextMsgs,
           jobDescription,
           resumeText,
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       const ai = String(data?.reply || "Sorry—no reply received.");
-      const finalMsgs: ChatMessage[] = [...nextMsgs, { role: "assistant" as const, content: ai }];
+      const finalMsgs: ChatMessage[] = [...nextMsgs, { role: "assistant", content: ai }];
       setMessages(finalMsgs);
       sessionStorage.setItem("jp_chat_msgs", JSON.stringify(finalMsgs));
-    } catch (e) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
@@ -274,18 +240,18 @@ export default function ResultsPage() {
   const btnTab =
     "px-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white/80 backdrop-blur dark:bg-gray-900/80 text-gray-900 dark:text-gray-100 hover:bg-white dark:hover:bg-gray-800 active:scale-[.99] text-sm md:text-base";
   const card =
-    "bg-white dark:bg-gray-950 rounded-2xl shadow p-5 md:p-6 border border-gray-200 dark:border-gray-800";
-  const headerBtn =
-    "px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-black text-sm md:text-base";
+    "bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl rounded-2xl shadow p-5 md:p-6 border border-white/40 dark:border-white/10";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
+    <div className="min-h-screen bg-[radial-gradient(80rem_50rem_at_0%_-10%,rgba(99,102,241,0.18),transparent),radial-gradient(90rem_50rem_at_100%_10%,rgba(236,72,153,0.16),transparent)] dark:bg-[radial-gradient(80rem_50rem_at_0%_-10%,rgba(99,102,241,0.16),transparent),radial-gradient(90rem_50rem_at_100%_10%,rgba(236,72,153,0.14),transparent)]">
       {/* Transparent header */}
-      <header className="sticky top-0 z-40 border-b border-transparent bg-transparent/50 backdrop-blur supports-[backdrop-filter]:bg-transparent/45">
+      <header className="sticky top-0 z-40 bg-white/60 dark:bg-gray-950/40 backdrop-blur-md border-b border-white/40 dark:border-white/10">
         <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between gap-4">
+          {/* Brand LEFT */}
           <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
             Job PowerUp
           </a>
+          {/* Auth RIGHT — white text */}
           <div className="flex items-center gap-2">
             <a
               href="/login"
@@ -304,7 +270,7 @@ export default function ResultsPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-8 space-y-6">
-        {/* Centered top block */}
+        {/* Centered header block */}
         <section className="text-center">
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
             Your Results{jobTitle ? ` — ${jobTitle}` : ""}
@@ -349,7 +315,6 @@ export default function ResultsPage() {
                 ? "border-indigo-300 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40"
                 : ""
             }`}
-            aria-current={activeTab === "improve" ? "page" : undefined}
           >
             How to improve your resume
           </button>
@@ -360,7 +325,6 @@ export default function ResultsPage() {
                 ? "border-fuchsia-300 dark:border-fuchsia-800 bg-fuchsia-50/70 dark:bg-fuchsia-950/40"
                 : ""
             }`}
-            aria-current={activeTab === "cover" ? "page" : undefined}
           >
             Cover Letter
           </button>
@@ -371,7 +335,6 @@ export default function ResultsPage() {
                 ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30"
                 : ""
             }`}
-            aria-current={activeTab === "quiz" ? "page" : undefined}
           >
             Interview Questions
           </button>
@@ -392,7 +355,7 @@ export default function ResultsPage() {
                   <button
                     onClick={() => copyToClipboard(improvements)}
                     disabled={!improvements.trim()}
-                    className={headerBtn}
+                    className="px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-black text-sm"
                   >
                     Copy
                   </button>
@@ -415,14 +378,12 @@ export default function ResultsPage() {
                   <button
                     onClick={() => copyToClipboard(coverLetter)}
                     disabled={!coverLetter.trim()}
-                    className={headerBtn}
+                    className="px-3 py-2 rounded-xl bg-gray-900 text-white hover:bg-black text-sm"
                   >
                     Copy
                   </button>
                 </div>
               </div>
-
-              {/* Nicely formatted letter: paragraphs & line spacing */}
               <div className="space-y-3 leading-relaxed">
                 {renderRichText(coverLetter)}
               </div>
@@ -438,7 +399,6 @@ export default function ResultsPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={async () => {
-                      // re-generate with same JD context
                       const raw = sessionStorage.getItem("jp_results");
                       let jobDescription = "";
                       if (raw) {
@@ -518,21 +478,25 @@ export default function ResultsPage() {
         </section>
       </main>
 
-      {/* Chat bubble (bottom-right) + theme pebble (bottom-left) */}
-      <button
-        onClick={() => {
-          setChatOpen((v) => !v);
-          if (!localStorage.getItem("jp_chat_tip_seen")) {
-            localStorage.setItem("jp_chat_tip_seen", "1");
-            setShowTip(false);
-          }
-        }}
-        className="fixed bottom-6 right-6 z-40 rounded-full p-3 shadow-lg bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white hover:from-indigo-700 hover:to-fuchsia-700"
-        aria-label="Chat with Job PowerUp"
-        title="Chat with Job PowerUp"
-      >
-        💬
-      </button>
+      {/* Bottom-right cluster: Chat bubble + Theme toggle together */}
+      <div className="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+        <button
+          onClick={() => {
+            setChatOpen((v) => !v);
+            if (!localStorage.getItem("jp_chat_tip_seen")) {
+              localStorage.setItem("jp_chat_tip_seen", "1");
+              setShowTip(false);
+            }
+          }}
+          className="rounded-full p-3 shadow-lg bg-gradient-to-r from-indigo-600 to-fuchsia-600 text-white hover:from-indigo-700 hover:to-fuchsia-700"
+          aria-label="Chat with Job PowerUp"
+          title="Chat with Job PowerUp"
+        >
+          💬
+        </button>
+        {/* Theme pebble NEXT to chat bubble */}
+        <ThemePebble />
+      </div>
 
       {showTip && !chatOpen && (
         <div className="fixed bottom-[5.5rem] right-6 z-40 rounded-xl bg-gray-900 text-white text-sm px-3 py-2 shadow">
@@ -540,21 +504,18 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Theme pebble bottom-left */}
-      <ThemePebble />
-
       {/* Chat panel */}
       {chatOpen && (
-        <div className="fixed bottom-24 right-6 z-40 w-[min(92vw,28rem)] max-h-[70vh] rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 shadow-xl flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
+        <div className="fixed bottom-24 right-6 z-40 w-[min(92vw,28rem)] max-h-[70vh] rounded-2xl border border-white/40 dark:border-white/10 bg-white/90 dark:bg-gray-950/90 backdrop-blur-xl shadow-xl flex flex-col">
+          <div className="px-4 py-3 border-b border-white/40 dark:border-white/10 flex items-center justify-between">
             <div className="font-semibold">Job PowerUp Bot</div>
-            <button onClick={() => setChatOpen(false)} className="text-sm text-gray-500 hover:text-gray-900">
+            <button onClick={() => setChatOpen(false)} className="text-sm text-gray-500 hover:text-gray-900 dark:hover:text-gray-100">
               ✕
             </button>
           </div>
           <div className="p-3 overflow-y-auto flex-1 space-y-3">
             {messages.length === 0 ? (
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-gray-600 dark:text-gray-400">
                 Ask anything about your resume or the job—I'll be honest, kind, and format answers cleanly.
               </div>
             ) : null}
@@ -586,7 +547,7 @@ export default function ResultsPage() {
               e.preventDefault();
               handleSend();
             }}
-            className="p-3 border-t border-gray-200 dark:border-gray-800 flex items-center gap-2"
+            className="p-3 border-t border-white/40 dark:border-white/10 flex items-center gap-2"
           >
             <input
               value={input}
@@ -612,28 +573,45 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Footer with build badge */}
-      <footer className="bg-gray-100/60 dark:bg-gray-950/60 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
+      {/* Footer */}
+      <footer className="bg-white/60 dark:bg-gray-950/50 backdrop-blur border-t border-white/40 dark:border-white/10 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
           <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
-            © {new Date().getFullYear()} Job PowerUp. All rights reserved.{" "}
-            <BuildStamp className="ml-2" />
+            © {new Date().getFullYear()} Job PowerUp. All rights reserved. <BuildStamp className="ml-2" />
           </div>
           <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
-            <a href="/privacy" className="hover:underline">
-              Privacy
-            </a>
-            <a href="/terms" className="hover:underline">
-              Terms
-            </a>
-            <a href="/contact" className="hover:underline">
-              Contact
-            </a>
+            <a href="/privacy" className="hover:underline">Privacy</a>
+            <a href="/terms" className="hover:underline">Terms</a>
+            <a href="/contact" className="hover:underline">Contact</a>
           </nav>
         </div>
       </footer>
-
-      {toastMsg && <Toast message={toastMsg} onClose={() => setToastMsg(null)} />}
     </div>
+  );
+}
+
+/** Bottom-right theme pebble (kept local so it's “next to” chat) */
+function ThemePebble() {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  useEffect(() => {
+    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
+    setTheme(saved);
+    document.documentElement.classList.toggle("dark", saved === "dark");
+  }, []);
+  function toggle() {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("jp_theme", next);
+    document.documentElement.classList.toggle("dark", next === "dark");
+  }
+  return (
+    <button
+      onClick={toggle}
+      className="rounded-full px-3 py-2 bg-gray-900 text-white hover:bg-black"
+      aria-label="Toggle theme"
+      title="Toggle theme"
+    >
+      {theme === "dark" ? "🌙" : "☀️"}
+    </button>
   );
 }

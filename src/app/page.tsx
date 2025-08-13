@@ -15,31 +15,6 @@ function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   );
 }
 
-function ThemePebble() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="fixed bottom-6 left-6 z-40 rounded-full px-3 py-2 bg-gray-900 text-white hover:bg-black"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙" : "☀️"}
-    </button>
-  );
-}
-
 export default function LandingPage() {
   const router = useRouter();
 
@@ -82,7 +57,7 @@ export default function LandingPage() {
     }
   }
 
-  // Menus with hover-delay so you can move into them
+  // Menus with hover-delay
   const [toolsOpen, setToolsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const toolsTimer = useRef<number | null>(null);
@@ -113,9 +88,9 @@ export default function LandingPage() {
 
   // Styles
   const inputBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white/90 dark:bg-gray-900/90 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const taBase =
-    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y";
+    "w-full border border-gray-300 dark:border-gray-700 rounded-xl p-3 md:p-4 text-base leading-relaxed bg-white/90 dark:bg-gray-900/90 text-gray-900 dark:text-gray-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y";
   const btnBase =
     "inline-flex items-center justify-center rounded-xl px-5 py-3 font-medium active:scale-[.99] disabled:opacity-50 disabled:cursor-not-allowed transition-colors";
 
@@ -130,7 +105,6 @@ export default function LandingPage() {
       const res = await fetch("/api/job-from-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // server prompt handles “summarize but keep role details” — we just pass the URL
         body: JSON.stringify({ url: jobUrl.trim() }),
       });
       const data = await res.json().catch(() => ({}));
@@ -150,13 +124,12 @@ export default function LandingPage() {
     }
   }
 
-  // Validate Resume immediately after selection and cache extracted text for chat
+  // Validate immediately + extract for chat
   async function validateSelectedFile(f: File) {
     setValidating(true);
     setValidationError(null);
     setValidated(false);
     try {
-      // Basic validation (can the server read any text?)
       const fd = new FormData();
       fd.append("file", f);
       const res = await fetch("/api/validate-resume", { method: "POST", body: fd });
@@ -166,16 +139,14 @@ export default function LandingPage() {
         throw new Error("That file appears to have little or no extractable text. Try another resume or export to PDF.");
       }
 
-      // Extract text for the assistant to use later
+      // Extract text cache for chat
       try {
         const fd2 = new FormData();
         fd2.append("file", f);
         const res2 = await fetch("/api/parse-resume", { method: "POST", body: fd2 });
         const d2 = await res2.json().catch(() => ({}));
         if (res2.ok && d2?.text) sessionStorage.setItem("jp_resume_text", String(d2.text));
-      } catch {
-        /* non-fatal */
-      }
+      } catch {}
 
       setValidated(true);
     } catch (err: any) {
@@ -268,10 +239,11 @@ export default function LandingPage() {
   const isReadyToGenerate = !loading && !!file && validated && !!jobDescription.trim();
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      {/* Transparent Header */}
-      <header className="sticky top-0 z-40 border-b border-transparent bg-transparent/50 backdrop-blur supports-[backdrop-filter]:bg-transparent/45">
+    <div className="min-h-screen flex flex-col bg-[radial-gradient(80rem_50rem_at_0%_-10%,rgba(99,102,241,0.18),transparent),radial-gradient(90rem_50rem_at_100%_10%,rgba(236,72,153,0.16),transparent)] dark:bg-[radial-gradient(80rem_50rem_at_0%_-10%,rgba(99,102,241,0.16),transparent),radial-gradient(90rem_50rem_at_100%_10%,rgba(236,72,153,0.14),transparent)]">
+      {/* Transparent, professional header */}
+      <header className="sticky top-0 z-40 bg-white/60 dark:bg-gray-950/40 backdrop-blur-md border-b border-white/40 dark:border-white/10">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-4">
+          {/* Brand LEFT */}
           <a href="/" className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
             Job PowerUp
           </a>
@@ -288,7 +260,7 @@ export default function LandingPage() {
               </button>
               {toolsOpen && (
                 <div
-                  className="absolute left-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  className="absolute left-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-xl p-2"
                   onMouseEnter={() => openWithCancel("tools")}
                   onMouseLeave={() => closeWithDelay("tools")}
                 >
@@ -313,7 +285,7 @@ export default function LandingPage() {
               </button>
               {helpOpen && (
                 <div
-                  className="absolute left-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-lg p-2"
+                  className="absolute left-0 mt-2 w-56 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-xl p-2"
                   onMouseEnter={() => openWithCancel("help")}
                   onMouseLeave={() => closeWithDelay("help")}
                 >
@@ -331,6 +303,7 @@ export default function LandingPage() {
             </div>
           </nav>
 
+          {/* Auth RIGHT — white text */}
           <div className="flex items-center gap-2">
             <a
               href="/login"
@@ -350,7 +323,7 @@ export default function LandingPage() {
 
       {/* Hero */}
       <main className="flex-1">
-        <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
+        <div className="mx-auto max-w-4xl px-6 pt-12 pb-6 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
             PowerUp My Resume
           </h1>
@@ -359,15 +332,15 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* Upload card with larger dashed area + drag & drop */}
-        <div className="mx-auto max-w-3xl bg-white dark:bg-gray-950 rounded-3xl shadow-lg p-6 md:p-8 space-y-6 border border-gray-200 dark:border-gray-800">
+        {/* Upload card with DnD */}
+        <div className="mx-auto max-w-3xl rounded-3xl border border-white/40 dark:border-white/10 bg-white/70 dark:bg-gray-950/70 backdrop-blur-xl shadow-lg p-6 md:p-8 space-y-6">
           <div>
             <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Upload Your Resume (PDF or DOCX)</h2>
 
             <div
               className={[
                 "rounded-2xl border-2 border-dashed",
-                dragActive ? "border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30" : "border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40",
+                dragActive ? "border-indigo-500 bg-indigo-50/60 dark:bg-indigo-950/30" : "border-gray-300 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/40",
                 "p-10 md:p-12 text-center transition-colors",
               ].join(" ")}
               onDragOver={onDragOver}
@@ -474,8 +447,8 @@ export default function LandingPage() {
                   disabled={!isReadyToGenerate}
                   className={`${btnBase} w-full text-white bg-gradient-to-r from-indigo-600 to-fuchsia-600 hover:from-indigo-700 hover:to-fuchsia-700`}
                 >
-                  {loading && <Spinner />}
-                  {loading ? "Generating…" : "Generate"}
+                {loading && <Spinner />}
+                {loading ? "Generating…" : "Generate"}
                 </button>
 
                 {loading && (
@@ -498,11 +471,10 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-100/60 dark:bg-gray-950/60 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
+      <footer className="bg-white/60 dark:bg-gray-950/50 backdrop-blur border-t border-white/40 dark:border-white/10 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
           <div className="text-gray-700 dark:text-gray-300 text-center md:text-left">
-            © {currentYear} {BRAND}. All rights reserved.{" "}
-            <BuildStamp className="ml-2" />
+            © {currentYear} {BRAND}. All rights reserved. <BuildStamp className="ml-2" />
           </div>
           <nav className="flex items-center gap-4 text-gray-500 dark:text-gray-400">
             <a href="/privacy" className="hover:underline">Privacy</a>
@@ -511,9 +483,6 @@ export default function LandingPage() {
           </nav>
         </div>
       </footer>
-
-      {/* Floating theme toggle */}
-      <ThemePebble />
     </div>
   );
 }
