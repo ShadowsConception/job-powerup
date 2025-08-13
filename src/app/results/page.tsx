@@ -78,33 +78,8 @@ async function copyToClipboard(text: string) {
 }
 
 /* ============================
-   Chat bubble + Theme pebble
+   Chat bubble (bottom-right)
    ============================ */
-function ThemePebble() {
-  const [theme, setTheme] = React.useState<"light" | "dark">("light");
-  React.useEffect(() => {
-    const saved = (localStorage.getItem("jp_theme") as "light" | "dark") || "light";
-    setTheme(saved);
-    document.documentElement.classList.toggle("dark", saved === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("jp_theme", next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-  }
-  return (
-    <button
-      onClick={toggle}
-      className="fixed bottom-6 right-[5.5rem] z-50 rounded-full border border-gray-300 dark:border-gray-700 bg-white/90 dark:bg-gray-900/90 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 shadow-md hover:bg-white dark:hover:bg-gray-800"
-      aria-label="Toggle theme"
-      title="Toggle theme"
-    >
-      {theme === "dark" ? "🌙" : "☀️"}
-    </button>
-  );
-}
-
 function AssistantBubble({
   context,
 }: {
@@ -617,7 +592,7 @@ export default function ResultsPage() {
         </button>
       )}
 
-      {/* Chat + theme pebble (theme sits just to the left of the chat button) */}
+      {/* Chat bubble (toggle handled globally via layout) */}
       <AssistantBubble
         context={{
           improvements,
@@ -627,7 +602,6 @@ export default function ResultsPage() {
           resumeText,
         }}
       />
-      <ThemePebble />
 
       <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">

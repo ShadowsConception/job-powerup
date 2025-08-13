@@ -2,8 +2,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Header from "@/components/Header";
-import FloatThemeToggle from "@/components/FloatThemeToggle";
 
 function Spinner({ className = "h-4 w-4 mr-2" }: { className?: string }) {
   return (
@@ -126,7 +124,7 @@ export default function LandingPage() {
 
       const quizPromise = fetch("/api/interview-quiz", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobDescription, count: 10 }),
+        body: JSON.stringify({ jobDescription, count: 10 } ),
       }).then((r) => r.json()).then((d) => { setProgress(90); setStatus("Building interview questions…"); return d; });
 
       const [improveData, coverData, quizData] = await Promise.all([analyzePromise, coverPromise, quizPromise]);
@@ -154,8 +152,6 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-gray-50 to-gray-200 dark:from-gray-950 dark:to-gray-900">
-      <Header showAuth />
-
       <main className="flex-1">
         <div className="mx-auto max-w-4xl px-6 pt-10 pb-6 text-center">
           <h1 className="text-4xl font-extrabold tracking-tight">
@@ -267,8 +263,6 @@ export default function LandingPage() {
           )}
         </div>
       </main>
-
-      <FloatThemeToggle />
 
       <footer className="bg-gray-100 dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 py-6 mt-10">
         <div className="mx-auto max-w-4xl px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
